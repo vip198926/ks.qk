@@ -1,0 +1,3792 @@
+Log.Close //关闭日志记录 
+
+//Dir.Delete ("/sdcard/com.ks.qk/log") //删除该文本文件
+
+Import "jsdvip.luae"      //jsd插件
+Import "lzdm.lua"        //联众打码
+Import "Thread.lua"    //多线程
+Import "zm.luae"
+Import "ShanHai.lua"
+zm.Init  //初始化紫猫插件
+
+//ShanHai.TLog_LogPath("/sdcard/com.ks.qk/logs/RunLog.log") 
+
+//=====================================网络接口开始=================//
+Dim 激活码=ReadUIConfig("输入框_单码登录_卡密")
+Dim 数据包="xxxxxxxxx,xxxxxxxxx,"&激活码
+Dim 软件编号="1"'声明那个软件
+Dim 软件更新编号="2061"'更新软件用的标识
+Dim 激活码更新编号="0"'激活码更新的标识
+Dim 心跳线程ID
+//=====================================网络接口结束==================//
+
+Dim 开始编号,结束编号,初始颜色数量,当前颜色数量
+Dim 开始时间,结束时间,运行时间,间隔时间,X坐标,Y坐标
+Dim 搜索词,检测时长
+Dim 网络验证码 // 用户各登录用
+Dim 屏幕亮度值
+Dim 功能选项,循环次数,当前循环次数
+Dim 脚本是否正常运行 = False
+Dim 金币已满 = 0
+Dim 是否换号 = False
+Dim 打码模式 //本地打码用的
+Dim 是否签到 = False
+Dim 自动上号切换号 = False
+Dim 成功=0
+Dim 售后=0
+Dim 要删除沙盒的编号
+Dim 转账金额 = 0
+Dim 支付密码
+Dim 当前 = 0
+Dim 账号数量
+Dim KEY //云端取号 使用
+Dim 自动任务 = ""
+Dim 金币收益
+Dim 现金收益
+Dim 收益记录
+Dim 要刷金币
+
+//Dim 黑屏视频 = 云控变量("黑屏编码:")
+
+Dim user = Trim(ReadUIConfig ("输入框_联众账号"))'用户名 Trim为去掉字符串左右俩边空格 
+Dim pwd = Trim(ReadUIConfig ("输入框_联众密码"))'密码	
+
+要刷金币 = Trim(ReadUIConfig("输入框_金币收益",8888))
+开始编号 = CInt(ReadUIConfig("输入框_开始编号", 1)) 
+结束编号 = CInt(ReadUIConfig("输入框_结束编号", 2))
+运行时间 = CInt(ReadUIConfig("输入框_运行时间", 30))
+循环次数 = CInt(ReadUIConfig("输入框_循环次数", 1))
+网络验证码 = ReadUIConfig("输入框_网络验证_用户名")
+功能选项 = ReadUIConfig("下拉框_功能选项", 2)
+KEY = Trim(ReadUIConfig ("输入框_云端取号")) 
+
+
+
+//==========================调试区========================
+
+//本地验证滑块()
+//
+//
+//jsdvip.StartServer()
+//
+//Do
+//
+//
+//沙盒启动APP 1, 1, "com.kuaishou.nebula"
+//	
+//Delay 2000
+//Loop
+//
+//云端取号(KEY)
+//脚本是否正常运行 = true
+//自动上号("登录")
+//收益 
+//脚本初始化()
+//开始任务(开始编号, 结束编号, 运行时间, 循环次数)
+//黑屏看视频("11111111111")
+//EndScript 
+//
+//==========================调试区========================
+
+
+Call main()
+
+
+Sub main()//主线程
+	
+    Dim 取号 = ReadUIConfig("多选框_云端取号")
+
+    Call 脚本初始化()
+    Delay 200
+    If user <> "admin" Then 
+        Call 用户名验证(网络验证码)
+    End If
+    
+    Call 云控变量("黑屏编码","金币读取间隔", "邀请码前缀")
+    
+    Delay 200
+    Dim 弹窗处理线程ID= Thread.Start(弹窗处理) //启动弹窗处理线程
+    Delay 200
+    
+    If 取号 = true Then 
+    	
+        If KEY = "" Then 
+            TracePrint "取号KEY未设置"
+            Dialog.MsgBox "取号KEY未设置", 0
+            脚本是否正常运行 = true
+            EndScript
+        Else 
+            Dim 取号结果 = 云端取号(KEY)
+        End If
+    End If
+
+    
+    Select Case 功能选项
+    
+    Case 0
+        自动任务 = "自动刷币"
+        Call 开始任务(开始编号, 结束编号, 运行时间, 循环次数)
+    Case 1
+        搜索词 = "发现页"
+        Call 开始任务(开始编号, 结束编号, 运行时间, 循环次数)
+    Case 2
+        Call 自动上号("登录")
+    Case 3
+        搜索词 = "自动提现"
+        Call 自动提现()
+    Case 4
+        搜索词 = ReadUIConfig("输入框_搜索词")
+        Call 自动注销()
+    Case 5
+        搜索词 = ReadUIConfig("输入框_搜索词")
+        Call 自动破黑()
+    Case 6
+        Call 自动上号("上号刷币")
+    Case Else
+        搜索词 = "自动提现"
+    End Select
+
+    Delay 200
+    
+    Call 后台清理()
+    Call 退出脚本()
+    
+End Sub
+
+Function 云端取号(KEY)
+
+    Dim 返回值,正则,匹配结果,url1,结果
+    Dim 文件路径 = "/sdcard/1.txt"
+    Dim 记录路径 = "/sdcard/com.ks.qk/logs/Cloud_Num.log"
+    Dim 取号记录
+    Dim 行数
+    //    Dim key = "DbwahE0Q3pO1BxjU0MMD"
+    //    正则 = "www%.jianguoyun%.com%/p%/(.*)"
+    //    TracePrint 正则
+    //    匹配结果 = zm.RegExMatchExSingle(网址, 正则)
+    //    TracePrint 匹配结果
+    //    
+    //    If 匹配结果<>Null Then
+    //        key = 匹配结果
+    //        TracePrint "key:"&key
+    //    Else
+    //        云端取号 = false
+    //        TracePrint "false"
+    //        Exit Function
+    //    End If
+    
+    
+    url1 = "https://www.jianguoyun.com/d/ajax/pubPreviewLink?key="& KEY &"&pdfviewer=true&_="&zm.Timestamp()&zm.RndNum (100,999)
+    返回值 = URL.Get(url1)
+    Delay 200
+    If 返回值 <> "" Then 
+        返回值 = Encode.JsonToTable(返回值)
+        If 返回值["url"]<>Null Then
+            结果 = 返回值["url"]
+            url1 = "https://www.jianguoyun.com" & 结果 & "&_=" & zm.Timestamp() & zm.RndNum(100, 999)
+            返回值 = URL.Get(url1)
+            Delay 500
+            Call File.Write(文件路径, 返回值)
+            Delay 200
+            行数 = File.LinesNumber(文件路径)
+            Call File.Write(记录路径, "  取号记录: 数量 " & 行数 & " 时间: " & GetNetworkTime()) //记录获取的账号数量和时间
+            Call 信息提示(2, "云端取号成功\n本次获取账号：" & 行数,2)
+            云端取号 = true
+        Else
+            云端取号 = false
+            Call File.Write(记录路径,"云端取号失败，请检查取号KEY或网络")
+            TracePrint "取号失败，请检查取号KEY或网络"
+            Dialog.MsgBox "取号失败，请检查取号KEY或网络", 0
+            EndScript
+        End If
+    Else 
+        Call File.Write(记录路径,"云端取号失败，请检查取号KEY或网络")
+        TracePrint "取号失败，请检查取号KEY或网络"
+        Dialog.MsgBox "取号失败，请检查取号KEY或网络", 0
+        EndScript
+    End If
+End Function
+
+Function 自动注销()
+    
+    If 搜索词 = "xxx" Then 
+        Call 自动上号("注销")  
+    Else 
+        EndScript 
+    End If
+	
+End Function
+
+Function 自动破黑()
+
+    If 搜索词 = "xxx" Then 
+        Call 自动上号("破黑")  
+    Else 
+        EndScript 
+    End If
+	
+End Function
+ 
+Function 脚本初始化()
+
+    Log.Open //打开日志，并记录日志
+    Dim 设备型号="设备型号: "&Device.GetModel()  //获取设备型号 
+    Dim 设备名称="设备名称: "& Device.GetName()  //获取设备名 
+    运行时间 = 运行时间 * 60 //输入的是分钟换成秒
+    Dim 环境路径 = "/sdcard/com.ks.qk/logs/"
+    If Dir.Exist(环境路径) = 0 Then 
+        If Dir.Create(环境路径) Then 
+            TracePrint "环境配置成功"
+        Else 
+            TracePrint "环境配置失败"
+        End If
+    End If
+    
+    If user = "admin" Then 
+	
+        打码模式 = 0 //本地打码
+	
+    Else 
+
+        //        打码模式 = 1 //网络打码
+        打码模式 = 0 //本地打码
+	
+    End If
+    
+    Do
+        Delay 200
+        If Device.IsLock() Then //如果设备锁屏,解锁设备
+            Device.UnLock //解锁设备
+            Delay 1000
+            Swipe 520,1888,520,0,200   //上滑解锁
+            Call 信息提示(1, "设置锁屏,解锁设备成功",2)
+        Else 
+            Exit Do
+        End If
+        	
+    Loop 
+
+
+    KeepScreen True  //屏幕常亮，不人为干预的话则不会自动关闭屏幕
+	
+    屏幕亮度值  = Device.GetBacklightLevel() //获取当前屏幕亮度值 停止脚本时还原用
+	
+    Device.SetBacklightLevel(30) //设置屏幕亮度为 30
+    Device.SetVolumeLevel(0) //设置设备中所有音量为0 静音
+	
+    Call 信息提示(1, 设备型号 & "\n" & 设备名称 & "\n屏幕常亮开启\n静音模式开启\n降低屏幕亮度成功",2)
+    
+    If jsdvip.StartServer() Then 
+    	
+        //jsdvip.PreventExce() //防报错异常终止 
+        jsdvip.SetDelay 50 //设置内部循环查找间隔延迟 
+        jsdvip.SetClickR true, 0.3, 0.6, 0.3, 0.6 //开启随机点击,设置之后所有点击功能都会随机,并且在节点范围X30%-60%,范围Y30%-60%
+        Call 信息提示(1, "初始化完成",2)
+    Else
+        TracePrint "很遗憾!相关服务启动失败,请重新启动脚本或重启设备,如多次试尝后仍不成功请联系作者"
+        Dialog.MsgBox("很遗憾!相关服务启动失败,请重新启动脚本或重启设备\n如多次试尝后仍不成功请联系作者",0)
+        EndScript 
+    End If
+    
+End Function
+
+Function 用户名验证(网络验证码)
+    
+    If InStr(1, jsdvip.HttpGet("https://tieba.baidu.com/p/1169648866"), 网络验证码) > 0 Then 
+        Call 激活码验证(数据包,激活码,软件编号,软件更新编号,激活码更新编号)'设备验证操作
+        Delay 100
+        Dim 激活码时长 = 激活码到期时间(数据包)
+        Delay 100
+        Thread.SetShareVar "数据包", 数据包
+        Thread.SetShareVar "激活码", 激活码
+        Thread.SetShareVar "软件编号",软件编号
+        心跳线程ID = Thread.Start(心跳线程)
+        Call 信息提示(1, "验证成功\n" & 激活码时长, 2)
+    Else 
+        TracePrint "验证未通过请检查用户名、卡密或网络"
+        Dialog.MsgBox "      验证未通过请检查用户名、卡密或网络",0
+        EndScript
+    End If
+	
+End Function
+
+
+//自动破黑开始++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Function 注锁账号(当前)
+	
+    Dim 文本内容 = File.ReadLine("/sdcard/1.txt",当前) 
+    Dim 分割= Split(文本内容,"----")
+    Dim 账号=Trim(分割(0))
+    Dim 网址=Trim(分割(1))
+    Dim 下一步是否点击 = False 
+    Dim 验证码
+    Dim n = 0
+    Dim 到主面 = false
+	
+    Delay 100
+	
+    Do
+   
+        //If jsdvip.FindNode("By.res('com.kuaishou.nebula:id/refresh_layout')") and jsdvip.FindNode("By.res('com.kuaishou.nebula:id/like_button')") //在主界 
+        //Call 信息提示(1, "自动提现 " & Round(zm.GetScriptMemory(),2) & "KB\n脚本已运行: "& Round(TickCount()/60000,2) &" 分钟\n执行注销账号")
+       
+        If jsdvip.Click("By.res('com.kuaishou.nebula:id/destroy_account').clickable(true)") Then //注销账号 设置进来后 
+            Delay 100
+            Call 信息提示(1, "执行注销账号",0)
+        ElseIf jsdvip.FindNode ("By.text('注销提醒')") and jsdvip.FindNode("By.desc('下一步')")  Then
+            Delay 100
+            If jsdvip.Click("By.desc('下一步')") Then 
+                下一步是否点击 = true
+            End If
+        ElseIf jsdvip.Click("By.desc('获取验证码')") Then
+            Delay 100
+            Call 信息提示(2, "等待获取验证码",0)
+              
+            验证码 = 获取验证码(网址)
+            
+            Delay 100
+            Call 信息提示(1, "验证码: " & 验证码,0)
+            Delay 100
+            
+            If CInt(验证码) > 0 Then 
+            	
+                Delay 100
+                
+                If jsdvip.SetText("By.text('请输入验证码')",验证码) Then 
+                    Delay 500
+                    If jsdvip.Click("By.desc('下一步')") Then 
+                        Delay 100
+                    End If
+                End If
+                
+            ElseIf 验证码 = "0" Then 
+                Delay 100
+                Call 信息提示 (1, "获取验证码失败,无法完成注销",1)
+                注锁账号 = false
+                //保存注销失败号
+                Call 保存售后(账号, 网址, "无码", "注销失败")
+                Exit Do
+                
+            ElseIf 验证码 = "-1" Then
+                Delay 100
+                Call 信息提示(1, "获取验证码失败,无法完成注销",1)
+                注锁账号 = false
+                //保存注销失败号
+                Call 保存售后(账号, 网址,"掉线", "注销失败")
+                Exit Do
+                
+            End If 
+  
+        End If
+   
+   
+        If jsdvip.Click("By.desc('确认注销并退出')") Then 
+            Delay 100
+            
+            If jsdvip.Click("By.res('com.kuaishou.nebula:id/positive').text('重新登录')") Then 
+                Delay 100
+            End If
+            Call 信息提示(1, "注销完成",1)
+            注锁账号 = true
+            //保存注销成功号
+            Call 保存成功(账号, 网址,"注销成功")
+            Exit Do
+
+        ElseIf jsdvip.FindLv("By.desc('确认注销')", 0, "node") Then 
+            Delay 100
+            If jsdvip.Click("node") Then //我已阅读并同意XXXX
+                Delay 500
+                If jsdvip.Click("By.desc('确认注销')") Then
+                    Delay 100
+                End If
+            End If
+
+        ElseIf jsdvip.Click("By.desc('同意')") Then
+            Delay 100 	
+        ElseIf jsdvip.FindNode("By.desc('注销条件')") Then
+            Delay 200
+            If jsdvip.FindNode ("By.desc('需满足以下条件，才能注销当前帐号。')")  Then //备选:需满足以下条件，才能注销当前帐号。
+                Delay 200
+                If jsdvip.FindNode("By.desc('未通过')") Then 
+                    Delay 100
+                    Call 信息提示(1, "注销条件不满足，注销失败",1)
+                    注锁账号 = False
+                    Call 保存售后(账号, 网址, "未通过", "注销失败")
+                    Exit Do 
+                ElseIf jsdvip.Click("By.desc('下一步')") Then 
+                    Delay 100
+                End If
+            End If
+   			
+        ElseIf jsdvip.Click("By.text('帐号与安全').res('com.kuaishou.nebula:id/entry_text')") Then
+            Delay 100
+        ElseIf jsdvip.Click("By.res('com.kuaishou.nebula:id/left_btn').desc('')") Then  //查找三杠的节点
+            Delay 500
+            If jsdvip.Click("By.res('com.kuaishou.nebula:id/tab_settings')") Then
+                Delay 100
+                到主面 = true
+            End If
+             
+        ElseIf 到主面 = false Then
+            Delay 100
+            KeyPress "Back"
+            Call 信息提示(1, "登录成功",1)
+        End If
+
+        If jsdvip.FindNode("By.desc('请处理以下事项后再尝试注销')") Then
+            Delay 100
+            Call 信息提示(1, "请处理违规事项后再尝试注销",1)
+            注锁账号 = False
+            Call 保存售后(账号, 网址, "违规", "注销失败")
+            Exit Do
+        End If
+    Loop
+    
+    Delay 100
+    
+    Call 删除沙盒()
+
+End Function
+
+Function 破黑(账号, 网址)
+	
+    Dim 验证码
+    Dim 节点属性值
+    Dim 倒计时
+    Dim 手机号已输入 = False
+
+    Do
+	
+        //处理登录
+        If jsdvip.Click("By.res('android:id/button2').text('拒绝')") Then 
+            Delay 200
+        ElseIf jsdvip.Click("By.res('com.smile.gifmaker:id/left_text').text('登录')") Then
+            Delay 200
+        ElseIf jsdvip.Click("By.res('com.smile.gifmaker:id/phone_login_text').text('手机号登录')") Then
+            Delay 200
+
+            //        ElseIf jsdvip.FindNode ("By.res('com.smile.gifmaker:id/login_title_tv').text('手机号登录')") Then
+            //            Delay 200
+            //            TracePrint "号登录页"
+        
+        ElseIf jsdvip.Click("By.res('com.smile.gifmaker:id/country_code_tv').text('+86')") Then
+            Delay 200
+        ElseIf jsdvip.FindNode("By.res('com.smile.gifmaker:id/title_tv').text('选择国家或地区')") Then 
+            jsdvip.Tap 1056, 1157
+            Delay 200
+            jsdvip.Click("By.res('com.smile.gifmaker:id/name_tv').text('美国 +1')")
+            Delay 200
+        ElseIf jsdvip.FindNode("By.res('com.smile.gifmaker:id/country_code_tv').text('+1')") Then 
+            Delay 200
+            If 手机号已输入 = False  Then 
+                If jsdvip.SetText("By.res('com.smile.gifmaker:id/login_name_et')", 账号) Then 
+                    手机号已输入 = true
+                    Delay 500
+                End If
+            End If
+            If jsdvip.Click("By.res('com.smile.gifmaker:id/next_view').text('下一步')") Then 
+                Call 滑块处理(5, "正在PH")
+            End If
+                
+        End If
+        
+
+        Call 滑块处理(1, "正在PH")
+	
+        //处理验证码
+        If jsdvip.FindNode("By.res('').text('验证码登录')") OR jsdvip.FindNode("By.res('').text('输入验证码')") Then 
+            Delay 200
+            If jsdvip.Click("By.res('com.smile.gifmaker:id/captcha_tv')") Then //点击获取验证码	
+                Delay 1000
+            End If
+             
+            验证码 = 获取验证码(网址)
+                
+            Delay 200
+                
+            If CInt(验证码) > 0  Then //有验证码
+                Delay 200
+                If jsdvip.SetText("By.res('com.smile.gifmaker:id/captcha_et')", 验证码) Then //设置验证码节点输入框文字为验证码
+                    //验证码输入 = true
+                    Delay 500
+                End If
+                    
+            ElseIf 验证码 = "0" Then
+                Call 信息提示(1, "验证码获取失败，切换下一账号",2)
+                自动上号切换号 = true
+                破黑 = false
+                Delay 1000
+                Call 保存售后(账号,网址,"无码","PHSB")
+                Exit Do 
+            ElseIf 验证码 = "-1" Then
+                Call 信息提示(1, "号码已掉线，切换下一账号",2)
+                自动上号切换号 = true
+                破黑 = false
+                Delay 1000
+                Call 保存售后(账号,网址,"掉线","PHSB")
+                Exit Do 
+            End If
+				
+            If jsdvip.Click("By.text('确定').enabled(true)") Then //验证码输入完后节点可操作
+                Delay 200
+            End If
+            
+            If jsdvip.FindNode("By.res('com.smile.gifmaker:id/signup_captcha_prompt').text('验证码错误')", 1000) Then 
+                Delay 500
+                Do
+                    Delay 100
+        			
+                    节点属性值 = jsdvip.GetText("By.res('com.smile.gifmaker:id/signup_captcha_tv')") //提取节点text属性值
+                    倒计时 = jsdvip.ExtractStr(节点属性值, 1+2) //提取节点属性中的数字和字母(倒计时)
+                    If 倒计时 = "" Then 
+                        Call 信息提示(1, "重新发送验证码",2)
+                        Exit Do
+                    Else 
+                        Call 信息提示(1, "验证码错误 "& 倒计时 &" 后重新发送",2)
+                    End If
+                Loop
+            End If
+          
+        End If
+ 
+        //登录成功处理
+        //com.smile.gifmaker:id/left_btn
+        If jsdvip.FindNode("By.res('com.smile.gifmaker:id/radio_sex')") Then //设置性别
+            If jsdvip.Click("By.res('com.smile.gifmaker:id/left_btn')") Then  //X 和三杠
+                Delay 200
+            End If
+        ElseIf jsdvip.Click("By.res('com.smile.gifmaker:id/right_btn').text('跳过')") Then
+            Delay 200
+        ElseIf jsdvip.FindNode ("By.res('com.smile.gifmaker:id/tab_settings').text('设置')") and jsdvip.FindNode ("By.res('com.smile.gifmaker:id/left_text').text('登录')") = False Then	
+            Delay 200
+            Call 信息提示(1, "登录成功",1)
+            破黑 = true
+            //保存破黑成功号
+            Call 保存成功(账号, 网址,"PHCG")
+            Exit Do
+        End If
+   
+        If jsdvip.FindNode("By.text('激活帐号')") or jsdvip.FindNode("By.desc('获取语音验证码')")  Then 
+            //异常账号，删除沙盒，换号登录
+            自动上号切换号 = False
+            破黑 = false
+            Delay 200
+            Call 保存售后(账号, 网址,"语音", "PHSB")
+            Exit Do
+        End If
+
+    Loop
+ 
+    Delay 100
+    
+    Call 删除沙盒()
+	
+End Function
+
+
+//自动破黑结果++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+
+//黑屏收益视频开始+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+Function 黑屏看视频(显示信息)
+
+    Dim 路径 = "/sdcard/com.ks.qk/logs/"
+    Dim 金币信息
+    //	Dim 黑屏编码 = shanhai.RandArray(File.ReadLines(路径&"黑屏编码"))
+    //  shanhai.execute ("am start -a android.intent.action.VIEW -d ksnebula://work/" & 黑屏编码)
+    
+    If jsdvip.FindNode("By.text('激活帐号')") or jsdvip.FindNode("By.desc('获取语音验证码')") Then 
+        Delay 200
+        黑屏看视频 = False
+        Call 信息提示(1,"账号异常",1)
+        Exit Function
+    ElseIf jsdvip.FindNode("By.text('同意并继续')") Then 
+        Delay 200
+        黑屏看视频 = False
+        Call 信息提示(1,"账号异常",1)
+        Exit Function
+    ElseIf jsdvip.FindNode("By.text('立即领取')") Then //点立即领取
+        Delay 200
+        黑屏看视频 = False
+        Call 信息提示(1,"账号异常",1)
+        Exit Function
+    ElseIf jsdvip.FindNode("By.res('com.kuaishou.nebula:id/login_text')") Then  //点登录领金币
+        Delay 200
+        黑屏看视频 = False
+        Call 信息提示(1,"账号异常",1)
+        Exit Function
+    ElseIf jsdvip.FindNode("By.res('com.kuaishou.nebula:id/phone_one_key_login_btn')") Then //点手机号登录
+        Delay 200
+        黑屏看视频 = False
+        Call 信息提示(1,"账号异常",1)
+        Exit Function
+    End If
+    
+    Dim 读收益间隔 = shanhai.RandArray(File.ReadLines(路径&"金币读取间隔")) * 60
+    
+    Delay 100
+    
+    If shanhai.Timer(1, 读收益间隔) Then 
+        Dim 收益返回值 = 收益()
+        If 收益返回值 = False  Then 
+            黑屏看视频 = False
+            Exit Function
+        End If
+    End If
+    
+    If 功能选项 = 0 Then 
+        金币信息 = "\n["&DateTime.Format("%H:%M:%S") & "] 沙盒: " & 要删除沙盒的编号 & "  金币: " & 金币收益 & "  预设: " & 要刷金币 &  " 现金: " & 现金收益
+    Else 
+        金币信息 = "沙盒: " & 要删除沙盒的编号 & "  金币: " & 金币收益 & "  预设: " & 要刷金币 &  " 现金: " & 现金收益
+    End If
+       
+    //ShowMessage "刷新倒计时" & 读收益间隔 - i &"秒"
+
+    Dim 金币转动 = 检测红包(10, 显示信息 & 金币信息)
+    Delay 100
+        
+    If 金币转动 = False Then 
+        KeyPress "Back"
+        Dim 黑屏编码 = shanhai.RandArray(File.ReadLines(路径&"黑屏编码"))
+        shanhai.execute ("am start -a android.intent.action.VIEW -d ksnebula://work/" & 黑屏编码)
+    End If
+
+End Function
+
+
+Function 收益()
+    Dim 金币记录()
+    Dim 收益路径 = "/sdcard/com.ks.qk/logs/Money.log"
+    Dim 旧收益记录 = File.Read (收益路径)
+    If 旧收益记录 <> "" Then 
+        金币记录 = Encode.JsonToTable(旧收益记录)
+    End If
+
+    Call 信息提示(1, "读取金币收益", 2)
+    
+    Do
+        Delay 200
+        
+        If jsdvip.Click("By.res('com.kuaishou.nebula:id/redFloat')") Then 
+            Delay 200
+        End If
+        
+        If jsdvip.FindLv("By.desc('现金收益')", 0, "现金") and jsdvip.FindLv("By.desc('金币收益')", 0, "金币") Then 
+    
+            Delay 200
+            金币收益 = jsdvip.GetDesc("金币", 200)
+            Delay 200
+            现金收益 = jsdvip.GetDesc("现金", 200)
+            Delay 200
+            If InStr(1, 金币收益, "w", true) > 0 Then //判断现金收益中有没字母W,有金币过万
+                Delay 200
+                金币收益 = Replace(金币收益, "w", "", true) * 10000 //把金币收益中的W字母替换成空字符再转换成整数*10000等于金币
+            End If
+            Delay 200
+            
+            收益记录 = "沙盒: " & 要删除沙盒的编号 & "  金币: " & 金币收益 & "  现金: " & 现金收益
+           
+            Call 信息提示(1, 收益记录, 2)
+            金币记录["沙盒:"& 要删除沙盒的编号] =  收益记录  & " "& DateTime.Format("%m-%d %H:%M") //以表记录
+            Dim 金币记录js = Encode.TableToJson(金币记录)
+            Call File.Write(收益路径, 金币记录js)
+            Exit Do
+        ElseIf jsdvip.FindNode("By.text('激活帐号')") or jsdvip.FindNode("By.desc('获取语音验证码')") Then 
+            Delay 200
+            收益 = False
+            Call 信息提示(1,"账号异常",1)
+            Exit Function 
+        ElseIf jsdvip.FindNode("By.text('同意并继续')") Then 
+            Delay 200
+            收益 = False
+            Call 信息提示(1,"账号异常",1)
+            Exit Function 
+        ElseIf jsdvip.FindNode("By.text('立即领取')") Then //点立即领取
+            Delay 200
+            收益 = False
+            Call 信息提示(1,"账号异常",1)
+            Exit Function 
+        ElseIf jsdvip.FindNode("By.res('com.kuaishou.nebula:id/login_text')") Then  //点登录领金币
+            Delay 200
+            收益 = False
+            Call 信息提示(1,"账号异常",1)
+            Exit Function 
+        ElseIf jsdvip.FindNode("By.res('com.kuaishou.nebula:id/phone_one_key_login_btn')") Then //点手机号登录
+            Delay 200
+            收益 = False
+            Call 信息提示(1,"账号异常",1)
+            Exit Function 
+        End If
+        
+        Call 滑块处理(1, "读取金币收益")
+        
+    Loop
+    
+    Call shanhai.TimeSign(1)
+    KeyPress "Back"
+End Function
+
+//黑屏收益视频结束+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+// 自动上号开始+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Function 自动上号(任务)
+	
+    自动任务 = "自动" & 任务
+    Dim 文本内容 = File.ReadLines("/sdcard/1.txt")
+    账号数量 = UBOUND(文本内容) + 1  
+    Dim 打开加速器 = ReadUIConfig("多选框_加速器") 
+    Dim 删除成功 = ReadUIConfig("多选框_删除成功") 
+    Dim 删除售后 = ReadUIConfig("多选框_删除售后")
+    Dim 记录路径 = "/sdcard/com.ks.qk/logs/"
+    Dim 记录内容 
+
+    Dim 注销结果
+    Dim 上号结果
+    Dim 破黑结果
+    Dim 包名
+    
+    
+    If 结束编号 > 账号数量 Then 
+        
+        Call 信息提示(1,"可用账号: " & 账号数量 & " 少于设置的 " & 结束编号 & ",请注意设置",2)
+    End If
+ 
+    If Dir.Exist("/sdcard/1自动上号") = 0 Then 
+        Dir.Create("/sdcard/1自动上号")
+    End If
+    
+    Delay 100
+    
+    If 删除成功 = true Then 
+        If Dir.Delete("/sdcard/1自动上号/成功.txt") Then
+            Call 信息提示 (1,"已删除 成功.txt",2)
+        ElseIf Dir.Exist("/sdcard/1自动上号/成功.txt") = 0
+            Call 信息提示(1, "成功.txt 文件不存在",2)
+        End If
+    End If
+    Delay 200
+    If 删除售后 = true Then 
+        If Dir.Delete("/sdcard/1自动上号/售后.txt") Then 
+            Delay 200
+            Call 信息提示(1, "已删除 售后.txt",2)
+        ElseIf Dir.Exist("/sdcard/1自动上号/售后.txt") = 0 
+            Delay 200
+            Call 信息提示(1, "售后.txt 文件不存在",2)	
+        End If
+
+    End If
+    Delay 200
+
+    For i = 开始编号 To 结束编号
+        
+        金币收益 = 0
+        现金收益 = 0
+        金币已满 = 0 //重新计算
+        Delay 200
+        Dim 分割= Split(文本内容(i-1),"----")
+        Dim 账号=Trim(分割(0))
+        Dim 网址=Trim(分割(1))
+        Delay 200
+        当前 = i
+        
+        记录内容 = "运行记录\n\n[root@" & Device.GetIP() & " qk]# " & 自动任务 & "\n当前编号："& 当前 & "\n开始编号："& 开始编号 &"\n结束编号："& 结束编号 & "\n账号数量：" & 账号数量 & "\n成功：" & 成功 &"  失败：" & 售后 &"\n当前账号："& 账号 & "\nTIME+："& Round(TickCount()/60000,2) &"min\nRES：" & Round(zm.GetScriptMemory(),2) & "KB\n记录时间："&GetNetworkTime()
+        If Dir.Exist(记录路径) = 0 Then 
+            Dir.Create(记录路径)
+            File.Write(记录路径 & "Record.log",记录内容)
+        Else 
+            File.Write(记录路径 & "Record.log",记录内容)
+        End If
+    
+        Delay 100
+		
+        If 当前 > 账号数量 Then 
+            Call 信息提示(3,账号数量 & " 个账号已使用完",1)
+            Exit For
+        End If
+
+        If 自动上号切换号 = False Then
+            Call 后台清理()
+            Delay 1000
+            
+            If 打开加速器 = true Then 
+                Call 打开天行()	
+            End If
+            
+            If 任务 = "破黑" Then 
+                包名 = "com.smile.gifmaker"
+            Else 
+                包名 = "com.kuaishou.nebula"
+            End If
+            
+            Delay 200
+            Call 沙盒启动APP(当前,结束编号,包名)
+            Delay 200
+            
+            If 任务 = "破黑" Then 
+                破黑结果 = 破黑(账号, 网址)
+            Else 
+                上号结果 = 上号(账号, 网址)
+            End If
+        Else 
+            If 任务 = "破黑" Then 
+                破黑结果 = 破黑(账号, 网址)
+            Else 
+                上号结果 = 上号(账号, 网址)
+            End If
+            Delay 200
+        End If
+	
+        If 上号结果 = true Then 
+            
+            If 任务 = "登录" or 任务 = "上号刷币" Then 
+                Call 自动上号后续(账号, 网址)
+            ElseIf 任务 = "注销" Then
+                
+                注销结果 = 注锁账号(当前)
+                //                
+                //                If 注销结果 = true Then 
+                //                    //保存注销成功号
+                //                    Call 保存成功(账号, 网址, 当前, 结束编号,"注销成功")
+                //                ElseIf 注销结果 = false Then
+                //                    //保存注销失败号
+                //                    Call 保存售后(账号, 网址, 当前, 结束编号, "不能注销", "注销失败")
+                //                End If
+	
+            End If
+            
+        End If
+        
+        If 破黑结果 = true Then 
+            //保存破黑成功号
+            //Call 保存成功(账号, 网址, 当前, 结束编号, "PHCG")
+            
+        ElseIf 破黑结果 = false Then
+            //保存破黑失败号
+            //Call 保存售后(账号, 网址, 当前, 结束编号, "PHSB", "PHSB")
+        End If
+
+    Next
+    Call 后台清理()
+    Call 信息提示(2, "所有任务已完成,脚本即将停止",1)
+End Function
+
+
+Function 打开天行()
+    
+    Do 
+        Delay 500
+        
+        If jsdvip.Click("By.desc('天行加速器').longClickable(true)") Then //桌面的可以长按longClickable(true)
+            Delay 500
+            Call 信息提示(2, "正在打开加速器",2)   
+            Delay 500
+        ElseIf jsdvip.Click("By.text('取消')") Then 
+            Delay 500
+        ElseIf jsdvip.FindNode("By.text('已连接(智能加速)')") Then
+            Call 信息提示(1,"启动智能加速成功",2)
+            Delay 500
+            Exit Do 
+        ElseIf jsdvip.FindNode("By.text('已连接')") Then
+            Call 信息提示(1,"启动加速成功",2)
+            Delay 500
+            Exit Do 
+        ElseIf jsdvip.FindNode("By.text('连接中')") Then
+            Call 信息提示(1,"正在启动加速",2)	
+            Delay 500
+        ElseIf jsdvip.FindNode("By.text('空闲')") Then	
+            Delay 500
+            If jsdvip.Click("By.res('org.skytech.skynet:id/btnConnect')") Then 
+                Call 信息提示(1,"正在启动加速",2)
+            End If
+            Delay 500
+        ElseIf jsdvip.FindNode("By.text('连接失败，请重试')") Then
+            Delay 500
+            If jsdvip.Click("By.res('org.skytech.skynet:id/btnConnect')") Then 
+                Call 信息提示(1,"正在启动加速",2)
+            End If
+            Delay 500
+        ElseIf Sys.AppIsFront("org.skytech.skynet") = false Then
+            Delay 500
+            KeyPress "Home"
+            Delay 500
+            jsdvip.RunApp("org.skytech.skynet")
+            Call 信息提示(2,"正在打开加速器",2)  
+            Delay 500
+        End If
+	
+    Loop
+    
+    Delay 500
+    KeyPress "Home"
+End Function
+
+Function 沙盒启动APP(当前,结束编号,包名)
+    Dim 沙盒ID
+    Dim json_temp
+    Dim json
+    Dim 运行软件
+    Dim 本机信息
+    Dim 新建沙盒 = "http://localhost:6666/newSandbox"
+    
+    Do
+
+        If Sys.isRunning("android.ext.system") = false Then 
+            jsdvip.RunApp ("android.ext.system")
+            Call 信息提示(2,"启动沙盒",2)
+        Else
+            本机信息 = URL.Get("http://localhost:6666/info")
+            If 本机信息 <> "" Then  
+                json_temp = URL.Get(新建沙盒,2000)
+                json = Encode.JsonToTable(json_temp)
+                沙盒ID = json["result"]["id"]
+                If 沙盒ID <> null Then 
+                    要删除沙盒的编号 = 沙盒ID
+                    Call 信息提示(5,"新建沙盒：" & 沙盒ID,2)
+                    
+                    Do
+                    
+                        运行软件 = "http://localhost:6666/runApp?id=" & 沙盒ID & "&package=" & 包名
+                        Dim 启动结果js = URL.Get(运行软件)
+                        If 启动结果js <> "" Then 
+                            Dim 启动结果 = Encode.JsonToTable(启动结果js)
+                            Dim 返回值 = 启动结果["result"]
+                            Call 信息提示(5,"启动快手："& 沙盒ID & "\n" &返回值 ,2)	
+                    
+                            If Sys.AppIsFront(包名) Then
+                                Exit Function
+                            End If
+                        End If
+                    Loop
+                    
+                Else 
+                    Call 信息提示(1, json["result"],2) 
+                    jsdvip.RunApp ("android.ext.system")
+                End If
+                
+            Else 
+                Call 信息提示(1, "请开启沙盒API服务", 2)
+            End If
+            
+        End If
+        
+        If jsdvip.Click("By.text('允许')") Then 
+            Delay 200
+        ElseIf jsdvip.Click("By.res('android:id/button1').text('退出')") Then
+            Call 信息提示(1,"网络请求失败",0)
+        End If
+        Delay 1000
+    Loop
+    
+End Function
+
+Function 上号(账号,网址)
+	
+    Dim 验证码
+    Dim 倒计时
+    Dim 节点属性值
+    Dim 用户协议 = False
+    Dim 手机号输入 = false
+    Dim 验证码输入 = false
+    Dim n = 0 
+    
+    Do
+        
+        Call 滑块处理(1,"账号登录")
+        Delay 100
+        If jsdvip.FindNode("By.res('com.kuaishou.nebula:id/protocol_checkbox')",1000) Then  //用户协议
+            If 自动上号切换号 = False Then
+                If 用户协议 = False Then 
+                    Delay 100
+                    jsdvip.Click ("By.res('com.kuaishou.nebula:id/protocol_checkbox')") //点用户协议
+                    Delay 500
+                    用户协议 = true
+                End If
+            End If
+        End If
+        
+        If jsdvip.Click("By.text('同意并继续')") Then 
+            Delay 200
+        ElseIf jsdvip.Click("By.text('拒绝')") Then
+            Delay 200
+        ElseIf jsdvip.Click("By.text('立即领取')") Then //点立即领取
+            Delay 200
+        ElseIf jsdvip.Click("By.res('com.kuaishou.nebula:id/login_text')") Then  //点登录领金币
+            Delay 200
+        ElseIf jsdvip.Click("By.res('com.kuaishou.nebula:id/phone_one_key_login_btn')") Then //点手机号登录
+            Delay 200
+        ElseIf jsdvip.Click("By.text('+86')") Then
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('选择国家或地区')") Then
+            Tap 1056, 1141  //点击"M" 字母位置 
+            Delay 200
+            jsdvip.Click("By.text('美国 +1')") 
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('+1')") Then //切换国际区号为美国后
+            Delay 200
+            If 手机号输入 = false Then
+                If jsdvip.SetText("By.res('com.kuaishou.nebula:id/phone_et')", 账号) Then //设置节点输入框文字
+                    Delay 500
+                    手机号输入 = true
+                End If
+            End If
+        End If
+ 
+        If jsdvip.Click("By.res('com.kuaishou.nebula:id/fetch_code_tv')") Then //点击获取验证码
+            Call 滑块处理(5, "等待获取验证码")
+            If jsdvip.FindNode("By.text('未注册的手机号登录成功后将自动注册')") and 手机号输入 = true Then 
+                Delay 1000
+                验证码 = 获取验证码(网址)
+                Call 滑块处理(1, "获取验证码结束\n验证码: " & 验证码)
+            End If 
+       
+            If CInt(验证码) > 0  Then //有验证码
+
+                If jsdvip.SetText("By.res('com.kuaishou.nebula:id/captcha_code_et')", 验证码) Then //设置验证码节点输入框文字为验证码
+                    //If jsdvip.Click("By.res('com.kuaishou.nebula:id/confirm_btn')")Then //点登录
+                    验证码输入 = true
+                    Delay 1000
+                End If
+
+            ElseIf 验证码 = "0" Then
+                Call 信息提示(1, "验证码获取失败，切换下一账号",1)
+                自动上号切换号 = true
+                上号 = false
+                Delay 200
+                Call 保存售后(账号,网址,"无码","售后")
+                Exit Function
+            ElseIf 验证码 = "-1" Then
+                Call 信息提示(1, "号码已掉线，切换下一账号",1)
+                自动上号切换号 = true
+                上号 = false
+                Delay 200
+                Call 保存售后(账号,网址,"掉线","售后")
+                Exit Function
+            End If
+ 
+        End If
+	
+        If jsdvip.FindNode("By.text('验证码错误')",500) Then 
+           
+            Do
+               
+                节点属性值 = jsdvip.GetText("By.res('com.kuaishou.nebula:id/fetch_code_tv')") //提取节点text属性值
+             
+                倒计时 = jsdvip.ExtractStr(节点属性值, 1+2) //提取节点属性中的数字和字母(倒计时)
+
+                If 倒计时 = "" Then 
+                    Call 滑块处理(1, "重新发送验证码")
+                   
+                    Exit Do
+                Else 
+                    Call 滑块处理(1, "验证码错误 "&倒计时&" 后重新发送")
+                End If
+                    
+            Loop
+
+        End If
+ 
+ 
+        n = n + 1
+      
+        If n > 200 Then 
+            //异常账号，删除沙盒，换号登录
+            自动上号切换号 = False
+            上号 = false
+            Delay 200
+            Call 信息提示(1,"登录超时",1)
+            Call 删除沙盒()
+            Delay 200
+            Call 保存售后(账号,网址,"超时","售后")
+            Delay 200
+            Exit Do
+
+        ElseIf jsdvip.FindNode("By.text('激活帐号')") or jsdvip.FindNode("By.desc('获取语音验证码')")  Then 
+            //异常账号，删除沙盒，换号登录
+            Call 信息提示(1,"账号异常",1)
+            上号 = false
+            自动上号切换号 = False
+            Call 删除沙盒()
+            Call 保存售后(账号, 网址, "语音", "售后")
+            Exit Do
+        ElseIf  jsdvip.Click("By.text('跳过')") Then //登录后设置昵称处点跳过   
+            Delay 200
+        ElseIf jsdvip.FindNode("By.res('com.kuaishou.nebula:id/float_root')") and jsdvip.FindNode("By.res('com.kuaishou.nebula:id/like_count_view')") and jsdvip.FindNode("By.res('com.kuaishou.nebula:id/login_text')") = false Then //进入到主界面
+            If 验证码输入 = true Then
+                Call 信息提示(1, "登录成功",1)
+                上号 = true
+                Exit Do
+            End if
+        End If
+    Loop
+    
+    
+End Function	
+
+Function 自动上号后续(账号, 网址)
+	
+    Dim n = 0 
+    
+    Do
+
+        Delay 200
+        If jsdvip.FindNode("By.text('激活帐号')") or jsdvip.FindNode("By.desc('获取语音验证码')")  Then     
+            //异常账号，删除沙盒，换号登录
+            Delay 200
+            Call 信息提示(1,"账号异常",1)
+            自动上号切换号 = False
+            Call 删除沙盒()
+            Delay 200
+            Call 保存售后(账号, 网址, "语音","售后")
+            Delay 200
+            Exit Do
+        End If
+
+        If jsdvip.FindNode("By.res('com.kuaishou.nebula:id/float_root')") and jsdvip.FindNode("By.res('com.kuaishou.nebula:id/like_count_view')") and jsdvip.FindNode("By.res('com.kuaishou.nebula:id/login_text')") = False Then //进入到主界面
+            Delay 500
+            //点赞关注两个
+            For 3
+                Delay 200
+                Call 屏幕上滑("执行关注")
+                Delay 200
+                Call 随机关注(8, 8)           
+                //Call 滑块处理(1, "执行关注")
+                //Call 随机点赞(6, 6)
+        
+            Next
+            //Delay 200
+            //Call 签到(6, 6)
+            
+            If 功能选项 = 6 Then 
+                Dim 收益返回值 = 收益()
+                If 收益返回值 = False  Then 
+                    Call 删除沙盒()
+                    Call 保存售后(账号, 网址, "语音", "售后")
+                    自动上号切换号 = False
+                    是否签到 = False
+                    Exit Function 
+                End If
+                
+                Do
+                	
+                    If CInt(金币收益) >= CInt(要刷金币) Then 
+                        Delay 200
+                        Call 信息提示(1, "金币已够 " & 要刷金币 & " 切换下一个账号", 1)
+                        Exit Do
+                    Else 
+                        Dim 黑屏刷币结果 = 黑屏看视频("")
+                        
+                        If 黑屏刷币结果 = False Then
+                            Call 删除沙盒()
+                            Call 保存售后(账号, 网址, "语音", "售后")
+                            自动上号切换号 = False
+                            是否签到 = False
+                            Exit Function 
+                        End If
+                    End If
+                    Delay 1000
+                Loop
+                
+            Else 
+                Call 填邀请码(当前, 结束编号)
+            End If
+
+            Delay 200
+            Call 保存成功(账号,网址,"成功") //把成功账号保存
+            
+            自动上号切换号 = False
+            是否签到 = False
+            Exit Do
+        End If
+		
+    Loop
+	
+End Function
+
+Function 获取验证码(网址)
+    Dim 验证码
+    Dim 返回值
+    Dim 倒计时
+    Dim 节点属性值
+    Dim json_temp
+    Dim json
+
+    Dim i = 30
+    
+    Do
+        Delay 100
+        Call 滑块处理(1, "获取验证码将在 " & i & " 次后超时\n" & 返回值)
+        
+
+        返回值 = URL.Get(网址, 1000)
+            
+        If UTF8.InStr(1, 返回值, "掉线") > 0 Then //掉线的号码
+            Delay 200
+            Call 信息提示(1, "号码已掉线\n" & 返回值,2)
+            获取验证码 = "-1" //掉线
+            Exit Function
+        End If
+            
+        //验证码 = shanhai.RegexFind(返回值, "%d+")
+        //验证码 = shanhai.RegexFind(返回值, "%d%d%d%d%d%d")
+        //验证码	= jsdvip.ExtractStr(返回值,1)
+        //验证码 =验证码(0)
+        //验证码 = jsdvip.MsgCode(返回值, 6)
+        //TracePrint 验证码
+
+        If 返回值 <> "" Then 
+            json_temp = Encode.JsonToTable(返回值)
+            json = json_temp["message"]
+            //验证码 = jsdvip.MsgCode(json)
+            验证码	= jsdvip.ExtractStr(json,1)
+        End If
+           
+        //Delay 200
+            
+        //If 验证码 <> null Then 
+        If 验证码 <> "" Then 
+            获取验证码 = 验证码
+            Call 滑块处理(1, "获取验证码成功\n" & 返回值 & "\n验证码: " & 验证码)
+            Exit Function
+        Else
+            i = i - 1
+        End If
+	  		
+        //End If
+     
+    Loop Until i = 0
+ 
+
+    获取验证码 = "0" //无码
+   
+End Function
+
+Function 保存成功(账号,网址,文件名)
+
+    Dim 文件路径 = "/sdcard/1自动上号/" & 文件名 & ".txt"
+    Dim 文件内容 =账号 & "----" & 网址 & "\n"
+    Delay 100
+    If File.Append(文件路径, 文件内容) Then
+        Delay 500
+        成功 = 成功 + 1
+        Call 信息提示(1,"成功账号保存成功",2)
+    Else 
+        Delay 100
+        Call 信息提示(1, "未知原因成功账号保存失败",2)
+    End If
+End Function
+
+Function 保存售后(账号,网址,售后原因,文件名)
+	
+    Dim 文件路径 = "/sdcard/1自动上号/"& 文件名 & ".txt"
+    Dim 文件内容 =售后原因 & "|" &账号 & "----" & 网址 & "\n"
+    Delay 100
+    If File.Append(文件路径, 文件内容) Then 
+        Delay 500
+        售后 = 售后 + 1
+        Call 信息提示(1,"失败账号保存成功",2)
+    Else 
+        Delay 100
+        Call 信息提示(1,"未知原因失败账号保存失败",2)
+    End If
+End Function
+
+Function 删除沙盒()
+    Dim 返回值
+    KeyPress "Home"
+    Delay 1000 
+    返回值 = URL.Get ("http://localhost:6666/deleteSandbox",1000) //删除正在运行的沙盒
+    Delay 1000
+   	
+    If 返回值 = "" Then //api 调用失败
+        Delay 200
+        
+        Do
+            Delay 200
+            
+            If jsdvip.Click("By.res('android:id/button2').text('删除')") Then //确实删除的删除 
+                Delay 500
+                Call 信息提示(2,"删除沙盒 " & 要删除沙盒的编号 & " 切换账号",2)
+                Exit Do 
+            ElseIf jsdvip.Click("By.res('android.ext.system:id/deleteBtn').text('删除')") Then //长按后出现的删除
+                Delay 500
+            ElseIf jsdvip.Click("By.text('关闭沙盒')")Then
+                Delay 500
+            ElseIf jsdvip.LongClick("By.text('"& 要删除沙盒的编号 &"')") Then //长按要删除的沙盒
+                Delay 500  
+            ElseIf jsdvip.Click("By.text('沙盒')") Then
+                Delay 500
+            ElseIf Sys.AppIsFront("android.ext.system") = false Then //如果沙盒不在前台就是没有启动成功则找沙盒
+          
+                Delay 500
+                jsdvip.RunApp ("android.ext.system")
+                Delay 500
+                
+            End If
+            
+        Loop
+     
+    Else 
+        Delay 200
+        Call 信息提示(1, "删除沙盒,切换账号\n沙盒: " & 返回值,2)	
+    End If 
+
+End Function
+
+Function 填邀请码(当前, 结束)
+	
+    Dim 路径 = "/sdcard/com.ks.qk/logs/"
+    Dim 邀请码
+    Dim n = 10
+    Dim 退出 = 0
+
+    Do
+       
+        Call 滑块处理(1, "填写随机邀请码")
+
+        If 退出 > 60 Then 
+            Call 信息提示(1,"填写邀请码超时",1)
+            Exit Function 
+        End If
+
+        If jsdvip.FindNode("By.desc('填写邀请码')") and jsdvip.FindNode("By.desc('活动规则')") Then 
+            If jsdvip.FindNode("By.desc('去填写')",1000) = False Then
+                Delay 200
+                Call 信息提示(1, "邀请码已填写",2)
+                Exit Do 
+            End If
+        End If
+        
+        If jsdvip.Click("By.desc('立即签到')") or jsdvip.FindNode("By.desc('打开签到提醒+100金币')") Then 
+            // KeyPress "Back"
+            Tap 126,338 //关闭X
+            Delay 200
+        End If
+    
+        If jsdvip.FindNode("By.desc('已成功填写好友')") Then 
+            Delay 200
+            Call 信息提示(1, "邀请码已填写",2)
+            Exit Do 
+        ElseIf jsdvip.Click("By.desc('去填写')") Then 
+            Delay 200
+            Call 信息提示(1, "填写随机邀请码",0)
+        ElseIf jsdvip.Click("By.res('com.kuaishou.nebula:id/redFloat')") Then
+            Delay 200
+            Call 信息提示(2, "填写随机邀请码",1)
+        End If
+ 
+       
+        Do
+           
+            Delay 200
+            
+            If jsdvip.FindNode("By.desc('送你新用户红包')") Then 
+                Call 信息提示(1, "邀请码填写成功",2)
+                Exit Function
+            ElseIf jsdvip.FindNode("By.desc('提交领现金')") Then
+                Delay 200
+                邀请码 = shanhai.RandArray(File.ReadLines(路径&"邀请码前缀")) & zm.RndStr(6, 1)
+                Delay 500
+                If jsdvip.SetText("By.clazz('android.widget.EditText')", 邀请码) Then //设置邀请码节点输入框文字为邀请码
+                    Delay 500
+                    If jsdvip.Click("By.desc('提交领现金')") Then 
+                        Delay 200
+                        If jsdvip.FindNode("By.desc('邀请码无效，请重新输入',1000)") Then 
+                            Delay 200
+                            Call 信息提示(1, "邀请码无效,剩余: " & n & " 次",0)
+                        End If
+                        
+                        n = n - 1
+                        
+                        If n < 0 Then 
+                            Exit Function
+                        End If
+                        
+                        Exit Do
+                    End If
+                End If
+            Else 
+                Exit Do
+            End If
+                
+        Loop
+       
+        退出 = 退出 + 1
+
+    Loop	
+	
+End Function
+
+// 自动上号结束+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+
+
+// 自动提现开始+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Function 自动提现()
+    自动任务 = "自动提现"
+    Dim 当前,返回值
+    Dim 账号数量_支付 = File.LinesNumber("/sdcard/zfb.txt")
+    Dim 证件数量 = File.LinesNumber("/sdcard/lz.txt")
+    Dim 打开加速器 = ReadUIConfig("多选框_加速器")
+    Dim 登录支FB = ReadUIConfig("多选框_登录支FB") 
+    Dim 实名支FB = ReadUIConfig("多选框_实名支FB") 
+    Dim 开始编号_支付
+    Dim 结束编号_支付
+    Dim 换快手号 = False 
+    Dim 换支付宝 = true 
+    Dim 提现结果
+    Dim 注销结果
+    Dim 认证结果
+    Dim 登录结果
+
+    //TracePrint "自动提现 " & Round(zm.GetScriptMemory(),2) & "KB\n脚本已运行: "& Round(TickCount()/60000,2) &" 分钟\n
+	
+    For 当前运行编号 = 开始编号 To 结束编号
+        
+        Delay 500
+
+        Do 
+			
+            Delay 500
+			
+            If 换支付宝 = true Then 
+                Delay 200
+                Call 后台清理()
+                
+                Delay 200
+                
+                If 打开加速器 = true Then 
+                    Call 打开天行()
+                    Delay 1000
+                End If
+                Delay 200
+                
+                If 登录支FB = true Then
+                    Delay 200
+                    
+                    登录结果 = 登录支付宝()
+                   
+                    Delay 200
+                    
+                    If 登录结果 = true Then 
+                        换支付宝 = False
+                        实名支FB = true
+                    Else 
+                        换支付宝 = true
+                        实名支FB = False 
+                    End If
+                    
+                    Delay 200
+                Else
+                    换支付宝 = False
+                End If
+                Delay 200
+                
+                
+                If 实名支FB = true Then 
+                    Delay 200
+                    
+                    认证结果 = 认证支付宝()
+                    
+                    Delay 200
+                    If 认证结果 = true Then 
+                    
+                        换支付宝 = False	
+                    Else 
+                        换支付宝 = true	
+                    End If
+                    
+                    Delay 1000
+                End If
+                
+                
+                Delay 200
+                KeyPress "Home"
+                Delay 200
+                //Call 后台清理()
+            
+            Else 
+      
+                Delay 1000
+ 
+                If jsdvip.FindNode ("By.res('com.kuaishou.nebula:id/redFloat')") Then //通过红包判断是否打开了快手           
+                    Call 滑块处理(1,"执行提现")
+                    Delay 200
+                    //提现
+                    提现结果 = 提现(当前运行编号)
+                    Delay 1000
+                    注销结果 = 注锁账号(当前运行编号)
+                    Delay 1000
+                    
+                    If 提现结果 = true Then 
+                        Delay 1000
+                        //转账
+                        Call 后台清理()
+                        Delay 1000
+                        Call 转账()
+                        Delay 1000
+                    Else
+                        //不用转账
+  						
+                    End If  
+ 
+                    If 注销结果 = true Then 
+                    
+                        换支付宝 = False
+                    Else
+                        换支付宝 = true
+                    End If
+                   
+                    Exit Do
+                    
+                ElseIf jsdvip.FindNode("By.pkg('com.kuaishou.nebula')") = false Then
+				
+                    返回值 = 启动快手(当前运行编号)
+                    Delay 1000
+                    If 返回值 = 1 Then //返回1是没有找到当前运行编号的沙盒，自动跳过
+                        Delay 200
+                        Exit Do
+						
+                    End If
+                        
+                End If
+					
+            End If
+
+        Loop
+        Delay 500
+        Call 信息提示(2, "换号提现",1)
+        Call 后台清理()
+        Delay 500
+        //        Call 心跳(数据包,激活码,软件编号)
+    Next
+    Delay 500
+    Call 后台清理()
+	
+    Call 信息提示(5, "提现任务完成",1)	
+	
+End Function
+
+Function 登录支付宝()
+	
+    Dim 文本内容_支付 = File.ReadLine("/sdcard/zfb.txt",1)
+    Dim 分割= Split(文本内容_支付,"----")
+    Dim 账号_支付=分割(0)
+    Dim 密码_支付=分割(1)
+    支付密码 = 分割(2)
+    WriteConfig("支付密码", 支付密码, true) // 把密码写入到配置里
+    Sys.ClearAppCache "com.eg.android.AlipayGphone"//清除支付宝应用的数据	
+    Call 信息提示(3, "登录支FB",1)
+    jsdvip.RunApp ("com.eg.android.AlipayGphone")
+    Delay 2000
+    
+    Dim 账号输入_支付 = false
+    Dim 密码输入_支付 = false
+    Delay 200
+    
+    If 账号_支付 = "" or 密码_支付 = "" Then 
+        Call 信息提示(1, "支FB账号都没有了，玩个锤子", 1)
+        Dialog.MsgBox("支FB账号都没有了，玩个锤子",0)
+        Call 后台清理()
+        Call 退出脚本()
+    End If
+   
+   
+    Do
+    
+        Delay 200
+        
+        If jsdvip.Click("By.res('android:id/button2').text('仍然支付')") Then 
+            Delay 50
+        End If
+
+        If jsdvip.Click("By.desc('关闭')") Then
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('请输入完整卡号')") Then
+        
+            Delay 200
+            Call 信息提示(1, "支FB账号异常",2)
+            Delay 200
+            登录支付宝 = false
+            Exit Do
+            
+        ElseIf jsdvip.FindNode("By.text('重置密码')") Then 
+            Delay 200
+            Call 信息提示(1, "支FB账号异常",2)
+            Delay 200
+            登录支付宝 = false
+            Exit Do
+   
+        ElseIf jsdvip.FindNode("By.text('点击下方头像登录')") Then 
+            Delay 200
+            Call 信息提示(1, "支FB账号异常",2)
+            Delay 200
+            登录支付宝 = false
+            Exit Do
+        	
+        ElseIf jsdvip.FindNode("By.text('自助解限')") Then 
+            Delay 200
+            Call 信息提示(1, "支FB账号异常",2)
+            Delay 200
+            登录支付宝 = false
+            Exit Do 
+        ElseIf jsdvip.Click("By.res('android:id/button2').text('同意')") Then
+            Delay 200
+        ElseIf jsdvip.Click("By.text('允许')") Then 
+            Delay 200
+        ElseIf jsdvip.Click("By.res('com.eg.android.AlipayGphone:id/loginButton')") Then //主界面的登录
+            Delay 200
+        ElseIf 账号输入_支付 = false Then
+            Delay 200
+            If jsdvip.SetText("By.res('com.ali.user.mobile.security.ui:id/content')", 账号_支付) Then 
+                Delay 500
+                账号输入_支付 = true	
+            End If
+
+        ElseIf jsdvip.Click("By.res('com.ali.user.mobile.security.ui:id/nextButton')") Then // 下一步
+            Delay 200
+        ElseIf jsdvip.Click("By.text('密码登录')") Then
+            Delay 200
+        ElseIf 密码输入_支付 = false Then
+            Delay 200
+            If jsdvip.FindNode("By.res('com.ali.user.mobile.security.ui:id/userPasswordInput')", "node") Then //查找节点并保存
+   
+                Delay 200
+                If jsdvip.FindChlid("node", "By.clazz('android.widget.EditText')", "child") Then     //节点中查找节点 密码输入框
+                    Delay 200
+                    If jsdvip.SetText("child", 密码_支付) Then // 设置密码输入框的内容为密码_支付
+                        Delay 500
+                        密码输入_支付 = true
+                    End If
+                    
+                    Delay 200
+                End If
+            End If
+
+        ElseIf jsdvip.Click("By.res('com.ali.user.mobile.security.ui:id/loginButton')") Then //密码输入完后的登录
+            Delay 200
+        ElseIf jsdvip.Click("By.res('com.alipay.mobile.antui:id/btn_confirm')") Then //登录后的弹窗下一步
+            Delay 200
+        ElseIf jsdvip.Click("By.res('com.alipay.mobile.accountauthbiz:id/update_cancel_tv')") Then	//版本更新稍后再说
+            Delay 200
+        ElseIf jsdvip.FindNode("By.res('com.alipay.android.phone.openplatform:id/tab_description').text('首页')") Then
+            //到达支付宝首页，跳出
+            Call 信息提示(1, "支FB登录成功",1)
+            登录支付宝 = true
+            Exit Do 
+
+        End If
+ 
+    Loop
+    
+    Delay 200
+    File.DeleteLine("/sdcard/zfb.txt",1)
+    
+End Function
+
+Function 认证支付宝()
+
+    Dim 文本内容_证件 = zm.FileReadLine("/sdcard/lz.txt",1,"auto")
+    Dim 分割_证件 = Split(文本内容_证件,"----")
+    Dim 姓名=分割_证件(0)
+    Dim 证件号=分割_证件(1)  
+    Dim 姓名是否设置 = false
+    Dim 我的是否点击 = false
+    Dim 证件号拆分
+    Call 信息提示(1, "认证支FB",1)
+    
+    If 姓名 = "" or 证件号 = "" Then 
+        Delay 200
+        Call 信息提示(1, "支FB料子都没有了，玩个锤子",2)
+        Dialog.MsgBox("支FB料子都没有了，玩个锤子",0)
+        Call 后台清理()
+        Call 退出脚本()
+        
+    End If
+	
+    Do
+        Delay 200
+        
+        If jsdvip.Click("By.res('android:id/button2').text('仍然支付')") Then 
+            Delay 50
+        End If
+		
+        If Sys.AppIsFront("com.eg.android.AlipayGphone") = false Then //支付宝不在前台，则打开支付宝
+            Delay 100
+            jsdvip.RunApp ("com.eg.android.AlipayGphone")
+            Delay 200
+        ElseIf jsdvip.FindNode("By.desc('选择以下任一种方式完成验证')") Then
+        
+            Delay 200
+            Call 信息提示(1, "支FB账号异常",2)
+            Delay 200
+            认证支付宝 = false
+            Exit Do
+        ElseIf jsdvip.Click("By.desc('关闭')") Then
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('请输入完整卡号')") Then
+        
+            Delay 200
+            Call 信息提示(1, "支FB账号异常",2)
+            认证支付宝 = false
+            Exit Do
+            
+        ElseIf jsdvip.FindNode("By.text('重置密码')") Then 
+            Delay 200
+            Call 信息提示(1, "支FB账号异常",2)
+            认证支付宝 = false
+            Exit Do
+   
+        ElseIf jsdvip.FindNode("By.text('点击下方头像登录')") Then 
+            Call 信息提示(1, "支FB账号异常",2)
+            认证支付宝 = false
+            Exit Do
+        ElseIf 我的是否点击 = false Then 
+            Delay 500
+            For 3
+                If jsdvip.Click("By.res('com.alipay.android.phone.wealth.home:id/sigle_tab_bg')") Then 
+                    Call 信息提示(1, "执行支FB实名",2)
+                    我的是否点击 = true
+                End If	
+            Next
+	
+        ElseIf jsdvip.Click("By.res('com.alipay.mobile.antui:id/item_left_text').text('余额')") Then
+            Call 信息提示 (1,"执行支FB实名",0)
+        ElseIf jsdvip.FindNode("By.text('充值')") and jsdvip.FindNode("By.text('提现')") and jsdvip.FindNode("By.text('余额')") Then //到了了看能否认证的界面
+            Delay 500
+            If jsdvip.FindNode("By.res('').text('补充身份信息')") = false Then 
+                Call 信息提示(1, "支FB已实名",2)
+                认证支付宝 = true
+                Exit Function
+            Else 
+                If jsdvip.Click("By.res('').text('补充身份信息')") Then
+                    Call 信息提示(2, "支FB未实名",2)
+                End if
+            End If
+        ElseIf 姓名是否设置 = false Then
+            Delay 200
+            If jsdvip.FindNode("By.desc('请填写中国大陆身份信息')") Then 
+                Delay 200
+                Call 信息提示 (1,"填写姓名: " & 姓名,2)
+                Delay 200
+                If jsdvip.SetText("By.res('userNameMainland')",姓名) Then
+                    Delay 200
+                    姓名是否设置 = true
+                End If	
+            End If
+			
+        ElseIf jsdvip.Click("By.clazz('android.widget.EditText').res('').text('点击填写')") Then //点击证件号输入框
+            Delay 200
+            Call 信息提示 (1,"填写证件号: "& 证件号,2)
+            For i = 1 To Len(证件号)
+                Delay 50
+                证件号拆分 = Mid(证件号, i, 1)
+                Delay 50
+                证件号拆分 = UCase(证件号拆分)
+                Delay 50
+                If jsdvip.Click("By.desc('"& 证件号拆分 &"')") Then 
+                    Delay 100
+                End If
+            Next
+        
+            Do
+                Delay 200
+		
+                If jsdvip.Click("By.clazz('android.view.View').res('').text('').desc('确定').clickable(true)") Then  //证件号输入完后点确定关闭键盘
+                    Delay 200
+                ElseIf jsdvip.Click("By.desc('关闭')") Then
+                    Delay 200
+                ElseIf jsdvip.Click("By.res('J_submitBtn_mainland').desc('提交')") Then
+                    Delay 200
+                ElseIf jsdvip.Click("By.text('已征得同意')") Then
+                    Delay 200
+                    Exit Do
+                ElseIf jsdvip.Click("By.res('com.alipay.mobile.antui:id/ensure').text('确定')") Then //证件错误
+                    Delay 200
+                ElseIf jsdvip.FindNode("By.text('请输入完整卡号')") Then
+                    Call 信息提示(1, "支FB账号异常",2)
+                    认证支付宝 = false
+                    Exit Do
+            
+                ElseIf jsdvip.FindNode("By.text('重置密码')") Then 
+                    Call 信息提示(1, "支FB账号异常",2)
+                    认证支付宝 = false
+                    Exit Do
+                ElseIf jsdvip.FindNode("By.text('点击下方头像登录')") Then 
+                    Call 信息提示(1, "支FB账号异常",2)
+                    认证支付宝 = false
+                    Exit Do
+                End If
+            Loop
+            
+        ElseIf jsdvip.FindNode("By.desc('身份信息已完善')") Then
+            Delay 200
+            If jsdvip.Click("By.res('com.alipay.mobile.nebula:id/h5_bt_text').desc('完成')") Then // 身份信息已完善 页的 完成
+                KeyPress "Home"
+                Delay 1000
+                Call 信息提示(1, "支FB实名完成",1)
+                认证支付宝 = true
+                File.DeleteLine("/sdcard/lz.txt", 1)
+                Exit Do 
+            End If
+		
+        End If
+        
+    Loop
+    Delay 200
+End Function
+
+Function 提现(当前运行编号)
+
+    Dim 文本内容 = File.ReadLine("/sdcard/1自动上号/成功.txt",当前运行编号) 
+    Dim 分割= Split(文本内容,"----")
+    Dim 账号=分割(0)
+    Dim 网址=分割(1)
+    Dim 提现金额 = 0
+    Dim 可提现金额 = 0
+    Dim 余额 = 0
+    Dim 验证码    
+    Dim 到达我的收益 = false
+    Call 信息提示(1,"执行提现",1)
+
+    
+    Do
+    	
+        Call 滑块处理(1,"提现")	
+        
+
+        If jsdvip.Click("By.res('com.kuaishou.nebula:id/redFloat')") Then 
+            Call 滑块处理(2,"开始自动提现")	
+        ElseIf jsdvip.FindNode("By.desc('立即签到')") Or jsdvip.FindNode("By.desc('打开签到提醒+100金币')") Then
+            jsdvip.tap(128,338)	//点击关闭X
+            Delay 500
+        ElseIf jsdvip.Click("By.desc('现金收益').clickable(true)") Then
+            Delay 1000
+        ElseIf 到达我的收益 = False Then
+            Delay 200
+            If jsdvip.FindNode("By.clazz('android.view.View').desc('汇率：10000金币=1元')") Then
+                Delay 200
+                If jsdvip.GetChild("By.desc('我的收益')", "node") Then
+                    Delay 200
+                    余额 = CSng(jsdvip.FindNodeInfo("node", 5, "desc"))
+                End If
+                
+                Delay 200
+                
+                If 余额 < 0.36 Then 
+                    提现金额 = 0
+                ElseIf 0.36 <= 余额 and 余额 < 3 Then
+                    提现金额 = 0.36
+                ElseIf 3 <= 余额 and 余额< 10 Then
+                    提现金额 = 3
+                ElseIf 10 <= 余额 and 余额 < 20 Then
+                    Delay 200
+                    提现金额 = 10
+                ElseIf 20 <= 余额 and 余额 < 50 Then
+                    Delay 200
+                    提现金额 = 20
+                ElseIf 余额 >= 50 Then
+                    Delay 200
+                    提现金额 = 50	
+                End If
+                
+                If 提现金额 < 3 Then 
+                    Call 信息提示(1,"我的收益: " & 余额 & " < 3元,放弃提现",2)
+                    提现 = false
+                    Exit Function
+                Else
+                    Call 信息提示(1, "可提现金额:" & 提现金额,2)
+                    转账金额 = 提现金额
+                    提现 = true
+                End If
+                
+
+                到达我的收益 = true
+                
+            End If
+			
+        ElseIf Cint(提现金额) > 0 Then
+		
+            If jsdvip.Click("By.pkg('com.kuaishou.nebula').desc('获取验证码')") Then
+                Call 滑块处理(3, "等待获取验证码")
+                
+                验证码 = 获取验证码(网址)
+  
+                Call 滑块处理(1, "验证码: "& 验证码)
+                
+                If CInt(验证码) > 0 Then 
+                    Delay 200
+                    If jsdvip.SetText("By.res('verifyCodeInput')",验证码) Then 
+                        Delay 1000
+
+                        For 10
+                        	
+                            Delay 1000
+                            
+                            If jsdvip.Click("By.desc('下一步')") Then 
+                                Delay 1000
+                            End If
+                                
+                            If jsdvip.FindNode("By.desc('您账号存在违规行为，已限制兑换。如需申诉请联系快手客服。')") Then 
+                                Call 滑块处理(3,"账号违规，已限制兑换")
+                                提现 = false
+                                Exit Function 
+                            ElseIf jsdvip.FindNode("By.desc('您的账号存在违规行为，无法兑换。如需申诉请联系快手客服。')") Then 
+                                Call 信息提示(1,"账号违规，无法兑换",2)
+                                提现 = false
+                                Exit Function 
+                            ElseIf jsdvip.FindNode("By.desc('提现成功！')") Then
+                                Call 信息提示(1,"提现成功！",1)
+                                提现 = true
+                                Exit Function 
+                            End If
+                    
+                        Next
+                   
+                    End If
+                    
+                ElseIf 验证码 = "0" Then
+                    Call 信息提示(1,"获取验证码失败,无法完成提现",2)
+                    提现 = false
+                    Exit Do
+  
+                ElseIf 验证码 = "-1" Then
+                    Call 信息提示(1,"获取验证码失败，无法完成提现",2)
+                    提现 = false
+                    Exit Do
+        
+                End If
+
+            ElseIf jsdvip.Click("By.clazz('android.widget.Button').desc('提取')") Then 
+                Delay 200
+            ElseIf jsdvip.Click("By.res('J-submit').desc('同意')") Then 
+                Call 信息提示(1, "支FB授权绑定",2)
+            ElseIf jsdvip.Click("By.desc('支付宝').clickable(true)") Then  
+                Call 信息提示(1, "提现到支FB",2)
+                If jsdvip.Click("By.desc('去绑定').clickable(true)") Then
+                    Call 信息提示(5, "绑定支FB",2)
+                End If
+            ElseIf jsdvip.Click("By.res('android:id/button2').text('仍然支付')") Then
+                Delay 200
+            ElseIf jsdvip.Click("By.desc('立即提现').clickable(true)") Then 
+                Delay 200
+            ElseIf jsdvip.Click("By.desc('去提现').clickable(true)") Then 
+                Delay 1000
+                可提现金额 = 提现金额 & "元"
+                If jsdvip.Click("By.desc('" & 可提现金额 & "').clickable(true)") Then 
+                    Call 信息提示(1, "可提现金额:" & 可提现金额,2)
+                End If
+            End If
+        End If
+    Loop  
+
+End Function
+
+Function 转账()
+   
+    //    Dim 文本内容_支付 = File.ReadLine("/sdcard/zfb.txt",1)
+    //    Dim 分割= Split(文本内容_支付,"----")
+    //    Dim 支付密码=分割(2)
+
+    If 支付密码 = null Then 
+        支付密码 = ReadConfig("支付密码")
+    End If
+
+    Dim 支付密码拆分
+    Dim 转账账户 = ReadUIConfig("输入框_转账账户")
+    Dim 金额已输入 = false
+    
+    Call 信息提示(1, "转账到支FB: " & 转账账户 & "\n转账金额: " & 转账金额 & " 元\n支付密码: " & 支付密码,2)
+
+    
+    Do
+		
+        
+        
+        
+        Delay 200
+        
+        If jsdvip.Click("By.res('android:id/button2').text('仍然支付')") Then 
+            Delay 50
+        End If
+        
+        If Sys.AppIsFront("com.eg.android.AlipayGphone") = false Then //支付宝不在前台，则打开支付宝
+            jsdvip.RunApp ("com.eg.android.AlipayGphone")
+            Delay 1000
+        ElseIf jsdvip.Click("By.desc('关闭')") Then
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('请输入完整卡号')") Then
+            Call 信息提示(1, "支FB账号异常",2)
+            转账 = false
+            Exit Do
+        ElseIf jsdvip.FindNode("By.text('重置密码')") Then 
+            Call 信息提示(1, "支FB账号异常", 2)
+            转账 = false
+            Exit Do
+        ElseIf jsdvip.FindNode("By.text('点击下方头像登录')") Then 
+            Call 信息提示(1, "支FB账号异常", 2)
+            转账 = false
+            Exit Do
+        ElseIf jsdvip.Click("By.text('允许').res('android:id/button1')") Then 
+            Delay 200
+        ElseIf jsdvip.Click("By.res('com.alipay.android.phone.openplatform:id/app_text').text('转账')") Then
+            Delay 200
+        ElseIf jsdvip.Click("By.res('com.alipay.mobile.antui:id/item_left_text').text('转到支付宝账户')") Then
+            Delay 500
+        ElseIf jsdvip.SetText("By.res('com.alipay.mobile.ui:id/content').text('支付宝账户/手机号码')",转账账户) Then
+            Delay 200
+            If jsdvip.Click("By.res('com.alipay.mobile.transferapp:id/tf_toAccountNextBtn').text('下一步')") Then 
+                Delay 1000
+            End If
+        ElseIf 金额已输入 = false Then
+            Delay 500
+            If jsdvip.SetText("By.res('com.alipay.mobile.antui:id/amount_edit').desc('输入转账金额')", 转账金额) Then 
+                Call 信息提示(1,"转账金额: " & 转账金额 & " 元",2)
+                金额已输入 = true	
+            End If
+
+        ElseIf jsdvip.Click("By.res('com.alipay.mobile.transferapp:id/tf_nextBtn').text('确认转账')") Then
+            Delay 200
+        ElseIf jsdvip.Click("By.res('android:id/button2').text('仍然支付')") Then 
+            Delay 200
+        ElseIf jsdvip.Click("By.res('').text('立即付款')") Then
+            Delay 200
+        ElseIf jsdvip.FindNode("By.res('com.alipay.android.phone.safepaybase:id/mini_spwd_rl_1')") Then
+            Delay 3000
+            
+            For i = 1 To Len(支付密码)
+                Delay 50
+                支付密码拆分 = Mid(支付密码, i, 1)
+                If jsdvip.Click("By.res('android:id/button2').text('仍然支付')") Then 
+                    Delay 100
+                End If
+                If jsdvip.Click("By.text('"& 支付密码拆分 &"')") Then 
+                    Delay 100
+                End If
+            Next
+            
+        ElseIf jsdvip.FindNode("By.res('').text('转账成功')") Then
+            Call 信息提示(2,"转账成功 转账到支FB: " & 转账账户 &" 转账金额: " & 转账金额 & " 元",1)
+            Exit Do
+        	
+        End If
+        
+    Loop
+
+End Function
+
+// 自动提现结束+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+
+
+// 刷视频开始+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Function 开始任务(开始编号, 结束编号, 运行时间, 循环次数)
+
+    Dim 返回值,当前运行编号,任务信息,黑屏刷币结果
+    Dim 记录路径 = "/sdcard/com.ks.qk/logs/"
+    Dim 记录内容
+	
+    For 当前循环次数 = 1 To 循环次数
+       
+        Delay 200
+       
+        For 当前运行编号 = 开始编号 To 结束编号
+    		
+    		金币收益 = 0
+            现金收益 = 0
+            金币已满 = 0 //重新计算
+    		
+            Delay 200
+            是否签到 = False
+            //开始时间 = 时间戳(GetNetworkTime())
+            开始时间 = Time()
+            Call 后台清理()
+			
+            当前 = 当前运行编号
+			
+            记录内容 = "运行记录\n\n[root@" & Device.GetIP() & " qk]# " & 自动任务 & "\n当前编号："& 当前 & "\n开始编号："& 开始编号 &"\n结束编号："& 结束编号 & "\n账号数量：" & 账号数量 & "\n成功：" & 成功 &"  失败：" & 售后 &"\nTIME+："& Round(TickCount()/60000,2) &"min\nRES：" & Round(zm.GetScriptMemory(),2) & "KB\n记录时间："&GetNetworkTime()
+            If Dir.Exist(记录路径) = 0 Then 
+                Dir.Create(记录路径)
+                File.Write(记录路径 & "Record.log",记录内容)
+            Else 
+                File.Write(记录路径 & "Record.log",记录内容)
+            End If
+			
+			
+            Do 
+                
+                Delay 200
+                
+                //结束时间 = 时间戳(GetNetworkTime())
+                结束时间 = Time()
+                间隔时间 = 结束时间 - 开始时间
+                任务信息 = "循环: " & 循环次数 & "次 当前: " & 当前循环次数 & "次 观看: " & 运行时间 / 60 & "分 已看: " & CInt(间隔时间 / 60) & "分"
+				
+                If jsdvip.FindNode("By.text('激活帐号')") or jsdvip.FindNode("By.desc('获取语音验证码')") or jsdvip.FindNode("By.res('com.kuaishou.nebula:id/phone_one_key_login_btn')") Then
+                    Call 信息提示(1, "账号异常,删除沙盒", 1)
+                    Call 删除沙盒()
+                    Exit Do
+                End If
+
+                If 是否换号 = True Then 
+                    Call 信息提示(1,"金币已不增长 切换下一个账号",1) 
+                    Call 收益()
+                    是否换号 = False
+                    //Call 清理缓存()
+                    Exit Do
+                ElseIf 间隔时间 >= 运行时间 Then
+                    Call 信息提示(1, "已观看满: " & 运行时间 / 60 & " 分钟  切换下一个账号",2)
+                    Call 收益()
+                    是否换号 = False
+                    //Call 清理缓存()
+                    Exit Do 
+                ElseIf CInt(金币收益) >= CInt(要刷金币) Then 
+                    Delay 200
+                    Call 信息提示(2, "金币已够 " & 要刷金币 & "  切换下一个账号", 1)
+                    是否换号 = False
+                    Exit Do
+                End If
+
+                If Sys.AppIsFront("com.kuaishou.nebula") Then //通过包名判断快手是否在前台，在前台执行观看视频，不在就打开快手
+
+                    If 功能选项 = 0 Then 
+         
+                        黑屏刷币结果 = 黑屏看视频(任务信息)
+                    
+                    ElseIf 功能选项 = 1 Then
+                   
+                        Call 发现页看视频(任务信息)
+                    
+                    ElseIf 功能选项 = 3 Then
+                   
+                        Delay 200
+                   
+                    End If
+                
+                    If 黑屏刷币结果 = false Then
+                        Call 信息提示(1, "账号异常,删除沙盒", 1)
+                        Call 删除沙盒()
+                        Exit Do
+                    End If
+             
+                ElseIf Sys.AppIsFront("com.kuaishou.nebula") = false Then
+					
+                    If jsdvip.FindNode("By.pkg('com.kuaishou.nebula')") = false Then
+				
+                        返回值 = 启动快手(当前运行编号)
+						
+                        If 返回值 = False Then //返回false 是没有找到当前运行编号的沙盒，自动跳过
+                            Exit Do
+                        Else 
+
+                            Dim 收益返回值 = 收益()
+                            If 收益返回值 = False  Then 
+                                Call 删除沙盒()
+                                Exit Do 
+                            End If
+                        End If	
+                    End If
+                End If
+			
+            Loop
+			
+			
+			
+        Next//编号结束
+        
+        Call 信息提示(2, 当前循环次数 & "  次循环任务完成",1)    
+		
+    Next //循环结束
+    
+    Call 信息提示(5, "所有循环任务已完成", 1)
+    
+End Function
+
+Function 签到(最小值,最大值)
+
+	
+    If 是否签到 = False Then 
+
+        Dim n = 0 //防止死循环加个次数
+        Dim 随机签到 = 随机数(最小值,最大值)
+        If 随机签到 = 6 Then 
+           
+            Do
+           
+                Call 滑块处理(1, "执行签到")
+                Delay 200
+                If n > 10 Then 
+				
+                    
+                    Call 滑块处理(1, "签到失败")
+                    KeyPress "Back"
+                    Exit Do
+                ElseIf jsdvip.FindNode("By.desc('去补签')")
+
+                    
+                    Call 滑块处理(1, "今日已签到")
+                    KeyPress "Back"
+                    是否签到 = true
+                    Exit Do
+                ElseIf jsdvip.FindNode("By.desc('去查看')")
+
+                   
+                    Call 滑块处理(2, "今日已签到")
+                    KeyPress "Back"
+                    是否签到 = true
+                    Exit Do
+ 
+                ElseIf jsdvip.Click("By.desc('去签到')")
+            	
+                    Call 滑块处理(1, "签到完成")
+                    KeyPress "Back"
+                    是否签到 = true
+                    Exit Do
+				
+                ElseIf jsdvip.Click("By.desc('立即签到')") Then 
+                
+                    Call 滑块处理(1, "签到完成")
+                    KeyPress "Back"
+                    Delay 500
+                    是否签到 = true
+                    Exit Do
+            
+                ElseIf jsdvip.Click("By.res('com.kuaishou.nebula:id/redFloat')") Then 
+
+                    Call 滑块处理(5, "执行签到")
+
+                ElseIf jsdvip.FindNode("By.desc('活动规则')")
+            
+                    Dim 随机x = 随机数(-10,10)
+                    Dim 随机y = 随机数(-20,20)
+                    Dim time1 = 随机数(888,1288)
+                    Delay 1000
+                    Swipe 200 + 随机x, 1388 + 随机y, 200 + 随机y, 500 + 随机y, time1
+                    Call 滑块处理(1, "执行签到")
+            		
+                End If
+                
+                n = n + 1
+				
+            Loop  
+        	
+        End If
+
+    End If
+	
+End Function
+
+Function 清理缓存()
+	
+    TracePrint "执行清理缓存"
+    Dim n = 0 //防止死循环加个次数
+
+    Do
+    
+        Delay 200
+        Dim 随机y = 随机数(888,988)
+        Dim 随机y1 = 随机数(-10,10)
+        Dim time1 = 随机数(1088,1288)
+
+        Call 滑块处理(1, "执行清理缓存")
+		
+        If n > 10 Then 
+    		
+            Call 滑块处理(2, "缓存清理失败")
+            Exit Do
+	
+        ElseIf jsdvip.Click("By.text('清除缓存')") Then
+            
+            Delay 2000
+            
+            If jsdvip.FindNode("By.text('快手所占缓存')") Then
+
+                If jsdvip.Click("By.res('com.kuaishou.nebula:id/clean_up_view')") Then
+            	
+                    Call 滑块处理(2, "缓存清理完成")
+                    Exit Do
+            	
+                End If
+                
+            Else 
+            
+                Call 滑块处理(2, "缓存清理完成")
+                Exit Do
+                
+            End If
+		   
+        ElseIf jsdvip.FindNode("By.res('com.kuaishou.nebula:id/left_btn')") Then //查找三杠的节点，这个三杠位置也是返回键地方且RES信息一样
+
+            If (jsdvip.FindNode("By.desc('返回')") = false) Then  // 没有找到desc的信息 返回 也就是它是三杠不是返回按钮时点击这个节点
+              
+                If jsdvip.Click ("By.res('com.kuaishou.nebula:id/left_btn')")
+               		
+                    Delay 2000
+                    
+                    If jsdvip.Click("By.res('com.kuaishou.nebula:id/tab_settings')") Then
+        	
+                        Call 滑块处理(2, "执行清理缓存")
+                    
+                    End If
+        		
+                End If
+                
+            Else
+            
+                Swipe 0, 随机y, 1080, 随机y + 随机y1, time1
+                Call 滑块处理(5, "执行清理缓存")    
+
+            End If
+            
+        Else
+
+            Swipe 0, 随机y, 1080, 随机y + 随机y1, time1
+            Call 滑块处理(5, "执行清理缓存")
+
+        End If
+        
+        n = n + 1
+	
+    Loop
+		
+End Function
+
+Function 主屏找沙盒()
+
+    Dim n = 1
+    Delay 200
+    KeyPress "Home"
+    Delay 1000
+    
+    Do Until jsdvip.FindNode("By.text('沙盒')")
+        Delay 200
+        Call 信息提示(1, "查找沙盒",2)
+        Swipe 988, 888, 88, 888, 200
+        
+        If n = 5 Then 
+        
+            Call 信息提示(2, "未找到沙盒\n请确保沙盒已安装\n并在主屏上而不是文件夹里",2)
+            Delay 200
+            KeyPress "Home"
+            Exit Do
+            
+        End If
+        
+        n = n + 1
+        	
+    Loop
+
+End Function
+
+Function 启动快手(当前运行编号)
+
+    Dim 启动结果
+    Dim json_temp
+    Dim json
+    Dim 运行软件
+    Dim 本机信息
+    Dim 包名 = "com.kuaishou.nebula" 
+    Dim 返回值
+    Dim 所有沙盒ID,沙盒数量
+   
+    Do
+
+        If Sys.isRunning("android.ext.system") = false Then 
+            jsdvip.RunApp ("android.ext.system")
+            Call 信息提示(3,"启动沙盒",2)
+        Else
+            
+            所有沙盒ID = Url.Get("http://localhost:6666/getAllSandboxId")
+           
+            If 所有沙盒ID <> "" Then  
+				
+                所有沙盒ID = Encode.JsonToTable(所有沙盒ID)
+                所有沙盒ID = 所有沙盒ID["result"]
+                沙盒数量 = UBound(所有沙盒ID) + 1
+                账号数量 = 沙盒数量
+                Call 信息提示(1,"获取到沙盒数量: "& 沙盒数量,2)
+				
+                运行软件 = "http://localhost:6666/runApp?id=" & 当前运行编号 & "&package=" & 包名
+                json_temp = URL.Get(运行软件)
+                Call 信息提示(5,"打开快手："& 当前运行编号,2)
+
+                If json_temp <> "" Then 
+                    json = Encode.JsonToTable(json_temp)
+                    启动结果 = json["code"]
+                    返回值 = json["result"]
+                	
+                    If 启动结果 = 1 Then 
+                        Call 信息提示(1,返回值,2)
+                        启动快手 = false
+                        Exit Do 
+                    End If
+					
+                    If Sys.AppIsFront(包名) Then
+                        Call 信息提示(1, "打开快手：" & 当前运行编号 & "\n" &返回值, 2)
+                        要删除沙盒的编号 = 当前运行编号
+                        启动快手 = true
+                        Exit Do 
+                    End If
+
+                End if
+      
+            Else 
+                Call 信息提示(1, "请开启沙盒API服务", 2)
+                jsdvip.RunApp ("android.ext.system")
+            End If
+        End If
+        
+        If jsdvip.Click("By.text('允许')") Then 
+            Delay 200
+        ElseIf jsdvip.Click("By.res('android:id/button1').text('退出')") Then
+            Call 信息提示(1,"网络请求失败",0)
+        End If
+        Delay 1000
+    Loop
+    
+End Function
+
+Function  观看视频(任务信息)
+	
+    Delay 200
+    If jsdvip.FindNode("By.text('拖动滑块')") Then
+
+
+        Call 滑块处理(1, "检测到滑块,正在处理")
+        
+        //如果出现播放进度条点击屏幕
+    ElseIf jsdvip.FindNode("By.res('com.kuaishou.nebula:id/thanos_pause_btn')") Then
+    
+    
+        X坐标=随机数(588,688 )
+        Y坐标=随机数(666,1266 )
+  
+        Tap X坐标, Y坐标
+
+        //点击作者视频开始观看	
+    ElseIf jsdvip.Click("By.res('com.kuaishou.nebula:id/player_cover_container')") Then
+        Call 滑块处理(4, "观看 [ " & 搜索词 & " ] 作品成功")
+        
+        //点击视频作者名字	
+    ElseIf jsdvip.Click("By.res('com.kuaishou.nebula:id/user_root_layout')") Then
+  	
+        Call 滑块处理(4, "已搜索到:" & 搜索词)
+        
+        //点击输入框处的搜索按钮
+    ElseIf jsdvip.Click("By.res('com.kuaishou.nebula:id/right_tv')") Then 
+       
+        Call 滑块处理(4, "搜索: [ " & 搜索词 & " ]")
+        
+        //点击搜索文本输入框	
+    ElseIf jsdvip.Click("By.clazz('android.widget.EditText')") Then
+    	
+        Call 滑块处理(6, "准备搜索: [ " & 搜索词 & " ]")
+        
+        InputText 搜索词
+        
+        Delay 200
+        Call 滑块处理(6, "输入搜索词: [ " & 搜索词 & " ]")
+        
+        //如果有主页搜索就点击主页搜索，没有的话就找主页三横
+    ElseIf jsdvip.Click("By.res('com.kuaishou.nebula:id/home_search_entrance')") Then
+  
+        Call 滑块处理(4, "ZY" & 任务信息)
+        //点击侧边搜索，如果没有找到就找主页搜索
+    ElseIf jsdvip.FindNode("By.text('设置')") Then
+           
+        If jsdvip.Click("By.text('搜索')") Then 
+            Call 滑块处理(5, "打开侧边栏搜索")
+        End If
+        
+        //点击主页三杠
+    ElseIf jsdvip.FindNodeInfo("By.res('com.kuaishou.nebula:id/left_btn')") Then //查找三杠的节点，这个三杠位置也是返回键地方且RES信息一样
+
+        If jsdvip.FindNodeInfo("By.desc('返回')") = false Then  // 没有找到desc的信息 返回 也就是它是三杠不是返回按钮时点击这个节点
+            jsdvip.Click ("By.res('com.kuaishou.nebula:id/left_btn')")
+            Call 滑块处理(4, "打开侧边栏")
+        End If
+    
+    End If	
+
+
+End Function
+
+Function 发现页看视频(任务信息)
+    Delay 200
+    Call 滑块处理(1,任务信息)
+    Delay 200
+    Call 检测红包(1,任务信息)
+    Delay 200
+    Call 签到(3,8)
+    Delay 200
+    Call 随机点赞(1,30)
+    Delay 200
+    Call 随机关注(1,50)
+    Delay 200
+    Call 屏幕上滑(任务信息)
+    Delay 200
+    Call 随机下滑(任务信息)
+    Delay 200
+End Function
+	
+Sub 随机点赞(最小值,最大值)
+    Delay 200
+    //随机点赞并休息一秒
+    Dim index = 随机数(最小值,最大值)
+    Dim 随机x,随机y
+    随机x = 随机数(488, 688)
+    随机y = 随机数(888, 1288)
+
+    If index = 6 Then 
+			
+        //Tap 随机x,随机y
+		
+        Call 随机延迟(188, 288)
+        
+        If jsdvip.Click("By.res('com.kuaishou.nebula:id/like_button')") Then 
+        	
+            Call 信息提示(2,"随机点赞",2)
+       
+        End If
+        
+        
+        //Tap 随机x, 随机y
+        
+        //Call 随机延迟(58, 68)
+  
+        //Tap 随机x, 随机y
+        
+		
+    End If
+    
+    
+    Call 随机延迟(1188, 1888)
+
+End Sub
+
+Sub 随机关注(最小值,最大值)
+
+    Delay 200
+    Dim index = 随机数(最小值,最大值)
+	
+    If index = 8 Then 
+
+      
+        //com.kuaishou.nebula:id/slide_play_bottom_follow_button_new
+
+        If jsdvip.Click("By.res('com.kuaishou.nebula:id/nebula_thanos_bottom_follow_button_layout')") Then
+            Delay 200
+        ElseIf jsdvip.Click("By.res('com.kuaishou.nebula:id/slide_play_right_follow_button')") Then 
+            Delay 200
+        ElseIf jsdvip.Click("By.res('com.kuaishou.nebula:id/slide_play_right_follow_icon')") Then 
+            Delay 200
+        End If
+        Call 滑块处理(1,"随机关注")
+    End If
+    Call 随机延迟(88, 588)
+End Sub
+
+Sub 随机下滑(任务信息)
+	
+    Delay 200
+    //随机下滑（防止被判定是机器）上滑后停留时间至少是10S，造成假象表示是对内容感兴趣
+	
+    Dim index = 随机数(1,50)
+	 
+    If index = 8 Then 
+	 	
+        Call 随机滑动(520, 232, 420, 1812)
+		
+        Dim time1 =随机数(10,15)
+	 	
+        Call 滑块处理(time1,任务信息)//在视频停留10-15秒
+	 	   
+        //向下滑动两个 在向上滑动之后执行，因为一般情况下，往回看翻过的视频，自然后跳过一个，直接看下一个视频
+	 	
+        Call 随机滑动(520, 1816, 420, 132)
+	
+        Call 随机延迟(500, 2000)
+	 	
+        Call 随机滑动(520, 1816, 420, 132)
+	
+    End If
+
+End Sub
+
+Sub 屏幕上滑(任务信息)
+    Delay 200
+    Dim x1 = 随机数(255,870)
+    Dim y1 = 随机数(1700,1800)
+    Dim x2 = 随机数(255,870)
+    Dim y2 = 随机数(222,300)
+    Dim time1 =随机数(3,6)
+    Dim time2 =随机数(500,1000)
+    
+    Swipe(x1, y1, x2, y2,time2)
+    
+    Call 滑块处理(time1,任务信息) 
+	
+End Sub
+
+Sub 红包不转滑屏(任务信息)
+    Delay 200
+    
+    If 功能选项 = 0 Then //观看搜索词作品
+
+
+        
+        If jsdvip.FindNode("By.res('com.kuaishou.nebula:id/created_time')") Then 
+
+            // TracePrint "红包异常"
+            //Call 信息提示(1, "红包异常")
+                
+            Dim 随机=随机数(0, 3)
+ 
+            If 随机 = 0 Then 
+
+
+                Call 随机滑动(520, 1816, 420, 132)
+       
+                If jsdvip.FindNode("By.text('没有更多作品')") Then 
+
+                    随机延迟(800,1000)
+                    Call 随机滑动(520, 232, 420, 1812)
+              
+                   
+                End If
+               
+        
+                //超级多点下滑动
+            ElseIf 随机 = 1 Then 
+   	
+              
+                Call 随机滑动(520, 232, 420, 1812)
+                If jsdvip.FindNode("By.text('没有更多作品')") Then 
+                    随机延迟(800,1000)
+                    Call 随机滑动(520, 1816, 420, 132)
+           
+                End If
+               
+            ElseIf 随机 = 2 Then
+            
+		
+                Call 随机滑动(520, 1816, 420, 132)
+           
+                If jsdvip.FindNode("By.text('没有更多作品')") Then 
+                    随机延迟(800,1000)
+                    Call 随机滑动(520,232, 420,1812)
+              
+                End If
+
+        
+                //超级多点下滑动
+            ElseIf 随机 = 3 Then
+
+                Call 随机滑动(520, 232, 420, 1812)
+                If jsdvip.FindNode("By.text('没有更多作品')") Then 
+                    随机延迟(800,1000)
+                    // jsdvip.Swipe (677 + 随机数(-20, 20), 1860 + 随机数(-20, 20), 722 + 随机数(-20, 20), 1438 + 随机数(-20, 20), 720 + 随机数(-20, 20), 1261 + 随机数(-20, 20), 677 + 随机数(-20, 20), 1016 + 随机数(-20, 20), 616 + 随机数(-20, 20), 875 + 随机数(-20, 20), 526 + 随机数(-20, 20), 718 + 随机数(-20, 20), 422 + 随机数(-20, 20), 608 + 随机数(-20, 20), 297 + 随机数(-20, 20), 491 + 随机数(-20, 20), 228 + 随机数(-20, 20), 444 + 随机数(-20, 20), 97 + 随机数(-20, 20), 365 + 随机数(-20, 20), 5 + 随机数(-3, 1))
+              		
+                    Call 随机滑动(520, 1816, 420, 132)
+                End If
+
+            
+            End If
+            
+            
+            
+        End If    
+				
+    ElseIf 功能选项 = 1 Then //观看发现页作品
+			
+        //        TracePrint "红包异常"
+        //        Call 信息提示(1, "红包异常")
+        //        Call 随机滑动(520, 1716, 420, 132)
+        Call 屏幕上滑(任务信息)
+        Delay 200
+    End If
+
+    
+End Sub
+
+Function 滑块处理(检测时长, 内容)
+
+    //检测有没滑块有执行打码	
+    For 检测时长
+    
+        Dim n = 1
+       
+        Do
+            
+            Call 信息提示(1, 内容,0)
+            
+            If jsdvip.FindNode("By.desc('向右拖动滑块填充拼图')") or jsdvip.FindNode("By.text('拖动滑块')")  Then
+    
+                If jsdvip.FindNode("By.desc('加载中…')") Then 
+                    Call 信息提示(1, "检测到滑块,等待加载..",2) //延迟5秒等滑块图片出现后再打码
+                Else 
+                	
+                    If n > 5 or jsdvip.FindNode("By.desc('无法连接网络，请稍后再试')")  Then 
+        		
+                        // Call 联众滑块报错()
+                        KeyPress "Back"
+                    End If
+                    
+                    Call 信息提示(1, "检测到滑块,正在处理..",2) 
+                    
+                    If 打码模式 = 0 Then 
+                
+                        Call 本地验证滑块()
+                	
+                    ElseIf 打码模式 = 1 Then
+                        Call 联众滑块打码()
+                        Call 联众检查点数()
+                    End If
+                    Call 信息提示(1, "滑块处理完成",2)
+                
+                    n = n + 1
+                    
+                End If
+
+            Else 
+	
+                Exit Do
+		
+            End If
+            
+        Loop
+            
+    Next
+    
+End Function
+    
+Function 弹窗处理() 
+    
+  
+    If jsdvip.StartServer() Then
+        jsdvip.SetClickR true, 0.3, 0.6, 0.3, 0.6 //开启随机点击,设置之后所有点击功能都会随机,并且在节点范围X30%-60%,范围Y30%-60%
+        Call 信息提示(1,"弹窗处理服务启动成功",2)
+    Else
+        Call 信息提示(1,"弹窗处理服务启动失败,请重新启动脚本",2)
+        Dialog.MsgBox("弹窗处理服务启动失败,请重新启动脚本",0)
+        EndScript
+    End If
+
+    Do
+
+        Delay 2000
+        
+        If jsdvip.FindNode("By.text('安全警告')") Then 
+            Delay 200
+            jsdvip.Click("By.text('继续')") //关闭vpn的网络安全提示
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('恭喜你获得新用户红包')") Then 
+            Delay 200
+            KeyPress "Back"
+        ElseIf jsdvip.Click("By.desc('重试')") Then
+            Delay 200
+        ElseIf jsdvip.Click("By.text('重试')") Then
+            Delay 200
+        ElseIf jsdvip.FindNode("By.desc('网页无法打开')") Then 
+            KeyPress "Back"
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('图片')") Then
+            Delay 200
+            Call 随机滑动(520, 1716, 420, 132)
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('点击打开图集')") Then
+            Delay 200
+            Call 随机滑动(520, 1716, 420, 132)
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('点击打开长图')") Then
+            Delay 200
+            Call 随机滑动(520, 1716, 420, 132)
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('立即参加')") Then
+            Delay 200
+            KeyPress "Back"
+            Delay 200
+        ElseIf jsdvip.FindNode("By.res('miui:id/message')text('快手极速版无响应。要将其关闭吗？')") Then
+            Delay 200
+            If jsdvip.Click("By.res('android:id/button1').text('确定')") Then 
+                Delay 200
+            End If
+            KeyPress "Home"
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('不感兴趣')") Then
+            Delay 200
+            KeyPress "Back"
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('减少类似作品')") Then
+            Delay 200
+            KeyPress "Back"
+        ElseIf  jsdvip.FindNode("By.text('快手用户调研')") Then   
+            Delay 200
+            KeyPress "Back"
+        ElseIf jsdvip.FindNode("By.text('免打扰升级')") Then
+            Delay 200
+            KeyPress "Back"
+        ElseIf jsdvip.FindNode("By.text('立即升级')") Then
+            Delay 200
+            jsdvip.Click("By.res('com.kuaishou.nebula:id/iv_close')")
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('立即邀请')") Then
+            Delay 200
+            jsdvip.Click ("By.res('com.kuaishou.nebula:id/close')")
+            Delay 200
+        ElseIf jsdvip.Click("By.text('我知道了')") Then
+            Delay 200
+        ElseIf jsdvip.FindNode("By.text('点击选择你感兴趣的内容')") Then
+            Delay 200
+            Call 随机滑动(520, 1716, 420, 132)
+        ElseIf jsdvip.Click("By.desc('立即签到')") Then 
+            Delay 200
+            Tap 127,338 //关闭X
+        ElseIf jsdvip.FindNode("By.desc('打开签到提醒+100金币')") Then 
+            // KeyPress "Back"
+            Tap 127,338 //关闭X
+            Delay 200
+        End If
+
+    Loop
+
+End Function       
+   
+Function 检测红包(检测时长,提示语)
+ 
+    //获取红包节点范围
+
+    Dim Tab =  jsdvip.FindNodeInfo("By.res('com.kuaishou.nebula:id/redFloat')","'rect'")//返回数组或null
+    
+    If Tab Then
+
+        初始颜色数量 = GetColorNum(Tab[1],Tab[2],Tab[3],Tab[4],"35D2FF|0050FF",1.0)
+	
+	
+        Call 滑块处理(检测时长, 提示语)
+
+        当前颜色数量 = GetColorNum(Tab[1],Tab[2],Tab[3],Tab[4],"35D2FF|0050FF",1.0)
+
+        If (当前颜色数量 - 初始颜色数量) = 0 Then 
+			
+            金币已满 = 金币已满 + 1
+			
+            检测红包 = False 
+
+            If 金币已满 > 1 Then 
+                Call 信息提示(1, "检测到金币异常 " & 金币已满 & " 次",2)
+            End If
+ 
+            If 金币已满 > 10 Then 
+                是否换号 = True
+            End If
+            
+        Else 
+            金币已满 = 0 //重新计算
+            检测红包 = True 
+        End If
+    End if
+
+End Function
+
+
+// 刷视频始束+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+
+//************************本地滑块开始**********************
+
+/*
+hk参数说明：一共5个参数 
+前4个是验证图的所在位置范围,范围越小速度越快
+第5个参数是滑块阴影的宽度，这个参数一定要准确
+滑动参数说明：一共4个参数 
+前两个是滑块条上的X，Y坐标，位置随意，第三个参数 
+是左边拼块的左边标X坐标，zb是右拼块左边的X坐标
+*/
+
+Function 本地验证滑块()
+
+    
+    Dim zb = hk(440,460,1000,640,128)
+    
+    //TracePrint zb
+    If zb > 0 Then 
+        Call 滑动(120,980, 80, zb)
+    Else 
+        //没算出滑动坐标刷新滑块
+        Tap 105 + 随机数(-10, 10), 768 + 随机数(-10, 10)
+    End If
+    
+End Function
+
+Function hk(x1, y1, x2, y2, n)
+    Dim r,g,b,m,s,y,k,d,GetColor
+    Dim p=0
+    Dim q=0
+    Dim l=""
+    For n
+        l = l & 0	
+    Next
+    
+    KeepCapture 
+    
+    For j = y1 To y2
+        
+        For i = x1 To x2
+            GetColor = GetPixelColor(i, j)
+            ColorToRGB (GetColor, r, g, b)
+            y = r + g + b
+            If y < 384 Then 
+                k = 0
+            Else 
+                k = 1
+            End If
+            d = d & k	
+        Next
+        
+        //TracePrint j&"----"&d
+        s = InStr(1, d, "1" & l & "1")
+        m = InStr(1, d, "1" & l & "01")
+        
+        If 0 < s < x2 - n Then 
+            p = p + 1
+            If p = 4 Then 
+                Exit For
+            End If
+        End If
+        
+        If 0 < m < x2 - n Then 
+            q = q + 1
+            If q = 4 Then 
+                Exit for
+            End If
+        End If
+        
+        d = ""
+    
+    Next
+    
+    ReleaseCapture 
+    
+    If s > m Then 
+        hk = s + x1
+    ElseIf m > s Then
+        hk = m + x1
+    Else 
+        hk = 0
+    End If
+    
+End Function
+
+Sub 滑动(tx, ty, x1, x2)
+	
+    //    Dim t1=随机延迟(988,1288)
+    //    Dim t2=随机延迟(888,988)
+    //    Dim t3=随机延迟(688,888)
+    //    TouchDown tx + 随机数(-10, 10), ty + 随机数(-30, 30), 1
+    //    TouchMove tx + 随机数(-10, 10) + (x2 - x1) * 0.6, ty + 随机数(-30, 30), 1,t1
+    //    Delay 200
+    //    TouchMove tx + 随机数(-10, 10) + (x2 - x1) * 0.8, ty + 随机数(-30, 30), 1,t2
+    //    Delay 200
+    //    TouchMove tx + (x2 - x1), ty + 随机数(-30, 30), 1,t3
+    //    Delay 200
+    //    TouchUp 1
+
+    zm.Swipe(tx + 随机数(-5, 5),ty + 随机数(-30, 30),tx + (x2 - x1),ty + 随机数(-30, 30))
+    
+End Sub
+
+//*************************本地滑块结束**********************
+
+Function 时间戳(网络时间)
+    /////////////////////////////////////////获得时间戳函数//////////////////////////////
+    //函数返回格林威治时间1970-01-01日00时00分00秒起至现在的总秒数。
+    //参数为命令GetNetworkTime()获取的时间,也可以是形如"2017-08-18 12:57:26"的字符串时间格式,注意字符串长度是固定的
+    //常用的话也可以自行在函数里加参数,得到真正的时间间隔函数
+    //用两个时间戳相减即可得到间隔时间(单位秒)
+
+    dim 年 = cint(Mid(网络时间, 1, 4))//年
+    dim 月 = cint(Mid(网络时间, 6, 2))//月
+    dim 日 = cint(Mid(网络时间, 9, 2))//日
+    dim 时 = cint(Mid(网络时间, 12, 2))//时
+    dim 分 = cint(Mid(网络时间, 15, 2))//分
+    dim 秒 = cint(mid(网络时间, 18, 2))//秒
+    Dim 起始年份=1970
+    Dim 大月,平月,小月,当月,闰年,平年,count=0
+    闰年 = 366 * 24 * 60 * 60
+    平年 =  365 * 24 * 60 * 60
+    大月 = 31 * 24 * 60 * 60
+    小月 = 30 * 24 * 60 * 60
+    当月 = 秒 + 60 * 分 + 3600 * 时 + (日 - 1) * 3600 * 24
+    //获得当年的2月时间戳
+    If (年 Mod 4) = 0 Then 
+        平月 = 29 * 24 * 60 * 60
+    Else 
+        平月 = 28 * 24 * 60 * 60
+    End If
+    
+    //计算经过的年数的时间戳,以年为一个区间
+    For 年 - 起始年份
+        If (起始年份 Mod 4) = 0 Then 
+            count = count + 闰年
+        Else 
+            count = count + 平年
+        End If
+        起始年份=起始年份+1
+    Next
+    //计算具体时间戳
+    If 月 = 1 Then 
+        count = count + 当月
+    ElseIf 月 = 2 Then
+        count = count + 大月 + 当月
+    ElseIf 月 = 3 Then
+        count = count + 大月 + 当月 + 平月
+    ElseIf 月 = 4 Then
+        count = count + 大月 * 2 + 当月 + 平月
+    ElseIf 月 = 5 Then
+        count = count + 大月 * 2 + 当月 + 小月 * 1 + 平月
+    ElseIf 月 = 6 Then
+        count = count + 大月 * 3 + 当月 + 小月 * 1 + 平月
+    ElseIf 月 = 7 Then
+        count = count + 大月 * 3 + 当月 + 小月 * 2 + 平月
+    ElseIf 月 = 8 Then
+        count = count + 大月 * 4 + 当月 + 小月 * 2 + 平月
+    ElseIf 月 = 9 Then
+        count = count + 大月 * 5 + 当月 + 小月 * 2 + 平月
+    ElseIf 月 = 10 Then
+        count = count + 大月 * 5 + 当月 + 小月 * 3 + 平月
+    ElseIf 月 = 11 Then
+        count = count + 大月 * 6 + 当月 + 小月 * 3 + 平月
+    ElseIf 月 = 12 Then
+        count = count + 大月 * 6 + 当月 + 小月 * 4 + 平月
+    End If
+    时间戳 = count - 8*3600
+    
+End Function
+
+Function 随机数(最小值, 最大值)
+
+    随机数 = Int((最大值 - 最小值 + 1) * Rnd() + 最小值)
+	
+End Function
+
+Function 随机延迟(最小值, 最大值)
+
+    Dim 返回值=随机数(最小值, 最大值)
+    Delay 返回值
+    
+End Function
+
+Function 随机滑动(x, y, x2, y2)
+	
+
+    Dim 随机数x,随机数y,延迟
+    延迟= 随机数(111,1111)
+    随机数x = 随机数(-100,100)
+    随机数y = 随机数(-100, 100)
+    
+    //    TracePrint "随机时间："&延迟
+    //    TracePrint "随机数x："&随机数x
+    //    TracePrint "随机数y："&随机数y
+ 
+    Swipe x - 随机数x, y - 随机数y, x2 - 随机数x, y2 - 随机数y, 延迟
+    
+End Function
+
+Sub 信息提示(显示时长, 内容,写入日志)								  
+    
+    Dim 显示内容 ="[root@"&Device.GetIP()&" qk]# " & 自动任务 & "\n--------------------------------\n[当前编号："& 当前 &"]  [账号数量：" & 账号数量 & "]\n[开始编号："& 开始编号 & "]  [结束编号："& 结束编号 &  "]\n[成功：" & 成功 &"]  [失败：" & 售后 &"]\n[TIME+："& Round(TickCount()/60000,2) &" min]  [RES：" & Round(zm.GetScriptMemory(),2) & "KB]\n--------------------------------\n" & "["&DateTime.Format("%H:%M:%S") & "] "&内容
+
+    If 写入日志 = 1 Then //完整日志
+        TracePrint "=====>" & 自动任务 & "当前编号："& 当前 & " 开始编号："& 开始编号 &" 结束编号："& 结束编号 & " 账号数量：" & 账号数量 & " 成功：" & 成功 &" 失败：" & 售后 &" TIME+："& Round(TickCount()/60000,2) &"min RES：" & Round(zm.GetScriptMemory(),2) & "KB [" & DateTime.Format("%H:%M:%S") & "] "&内容
+    ElseIf 写入日志 = 2 Then // 简约日志
+        TracePrint 内容
+        显示内容 = 内容
+    ElseIf 写入日志 = 0 Then
+        //不写日志
+    Else 
+        //不写日志
+    End If
+
+    For 显示时长
+        ShowMessage 显示内容, 52, 0, 1314
+        Delay 1000
+    Next
+End Sub
+
+
+Function 后台清理()
+
+    Delay 200
+    KeyPress "Home"
+    Delay 200
+    KeyPress "Home"
+    Delay 500
+    KeyPress "Menu"
+    Delay 2000
+    //判断后台清理按钮"X"是不是存在,存在时点击,不存在时返回桌面
+    If jsdvip.Click("By.res('com.android.systemui:id/clearAnimView')") or jsdvip.Click("By.res('com.android.systemui:id/clearButton')") Then 
+
+        Call 信息提示(1,"后台清理完成",2)
+        KeyPress "Home"
+        Delay 1000	
+    Else 
+        Call 信息提示(1,"后台无需清理",2)
+        KeyPress "Home"
+        Delay 1000
+		
+    End If
+	
+    Sys.ClearMemory() //释放内存
+    Delay 200
+
+End Function
+
+Function 退出脚本()
+	
+    jsdvip.SetClickR False //关闭jsd随机点击
+    TracePrint "脚本即将停止"
+    TracePrint "清理相关服务缓存"
+    jsdvip.ClearJsdCache
+    Delay 200
+    TracePrint "停止相关服务"
+    jsdvip.StopServer 
+    Delay 200
+    KeepScreen false  //屏幕常亮，不人为干预的话则不会自动关闭屏幕
+    TracePrint "屏幕常亮关闭"
+    Delay 200
+    Device.SetBacklightLevel(屏幕亮度值) //设置屏幕亮度为原来的值
+    TracePrint "屏幕亮度已还原"
+    Delay 200
+    //Device.Lock() //锁屏
+    //TracePrint "锁屏完成"
+    脚本是否正常运行 = true
+
+End Function
+
+Function OnScriptExit() 
+	
+    Thread.Stop 心跳线程ID //结束心跳线程
+    Call 退出登入(数据包,激活码,软件编号)
+    Dim 记录内容 ="[root@"&Device.GetIP()&" qk]# " & 自动任务 & "\n------------------------------------------------------\n当前编号："& 当前 &"\n账号数量：" & 账号数量 & "\n开始编号："& 开始编号 & "\n结束编号："& 结束编号 &  "\n成功：" & 成功 &"  失败：" & 售后 &"\nTIME+："& Round(TickCount()/60000,2) &" min\nRES：" & Round(zm.GetScriptMemory(),2) & "KB\n------------------------------------------------------\n记录时间："&GetNetworkTime()
+    If 脚本是否正常运行 = False Then 
+        TracePrint "脚本意外停止\n\n" & 记录内容
+        Dialog.MsgBox("脚本意外停止\n\n" & 记录内容,0)
+    Else 
+        //正常停止
+        //KeyPress "Home"
+        TracePrint "任务完成\n\n" & 记录内容
+        Dialog.MsgBox("任务完成\n\n" & 记录内容,0)
+    End If
+	
+End Function 
+
+
+//+++++++++++++++验证开始++++++++++++++++++++++++++++
+Sub 心跳线程()
+    Do
+        Delay 1000*60*10'10分钟
+        Call 心跳(Thread.GetShareVar("数据包"), Thread.GetShareVar("激活码"), Thread.GetShareVar("软件编号"))
+        TracePrint "**"& GetNetworkTime()
+        Sys.ClearMemory() //释放内存
+    Loop
+End Sub
+
+Function 激活码验证(数据包,激活码,软件编号,软件更新编号,激活码更新编号)
+    'Token = Trim(Token)
+    Dim 随机标示,按钮
+    Dim 激活码公告编号="0"
+    Dim 软件公告编号="0"
+    //设备信息读取
+    //安卓路径
+    
+    'dim 退出记录文件路径= "/sdcard/"&软件编号&激活码"jc_t.txt"
+    Dim 公告标示路径 = "/sdcard/com.ks.qk/logs/"&软件编号&激活码&"gg.txt"'激活码公告标示路径
+    Dim 软件公告标示路径 = "/sdcard/com.ks.qk/logs/"&软件编号&激活码&"ggg.txt"'软件公告标示路径
+    Dim 随机标示文件路径 = "/sdcard/com.ks.qk/logs/"&软件编号&激活码&"sjbs.txt"'随机标示文件路径
+    //获取设备信息
+    
+    Dim 设备类型 = Device.GetName()//获取设备名
+    dim 机器码=GetDeviceID()//获取机器码
+    
+    If 设备类型 = "iPhone" Then 
+        //苹果路径
+        '退出记录文件路径= "/private/var/mobile/Media/DCIM/"&软件编号&激活码&开发者账号&"jc_t.txt"
+        公告标示路径 = "/var/log/qkks/"&软件编号&激活码&"gg.txt"'激活码公告标示路径
+        软件公告标示路径 = "/var/log/qkks/"&软件编号&激活码&"ggg.txt"'软件公告标示路径
+        随机标示文件路径 = "/var/log/qkks/"&软件编号&激活码&"sjbs.txt"'随机标示文件路径
+    End If
+    '下线判断
+    dim xx= Url.Get("http://www.vip667.cn/API/web2/xxpd.php?sj="&数据包)
+    xx=Trim(xx)//获取随机标示
+    //    TracePrint xx
+    '检查本机是否存在随机标示文件
+    If Dir.Exist(随机标示文件路径) = 1 Then 
+        //有随机文件
+        If xx = "1" or xx = 1 Then 
+            随机标示= 随机字符串(12)
+            File.Write 随机标示文件路径, 随机标示
+            随机标示=Trim(随机标示)//获取随机标示 
+            //            TracePrint 随机标示
+        Else 
+                   
+            随机标示 = Trim(File.Read(随机标示文件路径))
+            //TracePrint 随机标示&"aaaaaa"
+        End If
+    Else 
+        //无随机文件
+        随机标示= 随机字符串(12)
+        File.Write 随机标示文件路径, 随机标示
+        随机标示=Trim(随机标示)//获取随机标示 	
+    End If	
+	
+	
+    '检查本机是否存在激活码公告标示文件
+    If Dir.Exist(公告标示路径) = 1 Then 
+        //有随机文件
+        激活码公告编号 = Trim(File.Read(公告标示路径))
+        ' TracePrint 激活码公告编号
+
+    End If
+	
+
+    '检查本机是否存在激活码公告标示文件
+    If Dir.Exist(软件公告标示路径) = 1 Then 
+        //有随机文件
+        软件公告编号 = Trim(File.Read(软件公告标示路径))
+    End If
+	
+	
+	
+    //    TracePrint "金森网络安全官网:www.vip667.cn"'开始对接
+    ' print "金森网络安全官网:www.vip667.cn"
+    Dim data="sj="&数据包&"&rjbh="&软件编号&"&sbm="&设备类型&"&sbbh="&机器码&"&rjgxbh="&软件更新编号&"&rjggbh="&软件公告编号&"&jhmgxbh="&激活码更新编号&"&jhmggbh="&激活码公告编号&"&sjbs="&随机标示
+    'TracePrint data
+    Dim fhz=Url.Post("http://www.vip667.cn/API/web2/jhm.php",data)
+    fhz = Trim(fhz)
+    If fhz = "" or fhz = Null Then 
+        If Dialog.MsgBox("当前环境异常", 0) = 0 Then 
+            脚本是否正常运行 = true
+            EndScript'停止脚本
+        End If
+    End If
+    //    TracePrint fhz
+    
+    fhz = Split(fhz, ",")//分割提示
+    If fhz(0) = "-1" Then 
+        If Dialog.MsgBox(fhz(1), 0) = 0 Then 
+            脚本是否正常运行 = true
+            EndScript'停止脚本
+        End If
+    End If
+	
+    Dim 更新链接
+	
+    If fhz(0) = "2" Then 
+        按钮 = Dialog.MsgBox("当前激活码需要更新,点击确定即可进入新版软件下载页面", 0)
+        If 按钮 = 0 Then 
+            //            zm.OpenURL (fhz(1))
+            更新链接 = 蓝奏云直链解析(fhz(1))
+            zm.OpenURL (更新链接)
+            脚本是否正常运行 = true
+            EndScript'停止脚本
+        End If
+    End If
+    
+    If fhz(0) = "3" Then 
+        按钮 = Dialog.MsgBox("当前软件需要更新,点击确定即可进入新版软件下载页面", 0)
+        If 按钮 = 0 Then 
+            //            zm.OpenURL (fhz(1))
+            更新链接 = 蓝奏云直链解析(fhz(1))
+            zm.OpenURL (更新链接)
+            脚本是否正常运行 = true
+            EndScript'停止脚本
+        End If
+    End If
+    
+    If fhz(0) = "4" Then 
+        //软件公告
+        '存储软件公告编号
+        File.Write 软件公告标示路径, fhz(2)
+        Dialog.MsgBox "公告提示：" & fhz(1), 0
+    End If
+    
+    If fhz(0) = "5" Then 
+        //激活码公告
+        '存储激活码公告编号
+        File.Write 公告标示路径, fhz(2)
+        'TracePrint fhz(2)
+        Dialog.MsgBox "公告提示：" & fhz(1), 0
+    End If
+	
+	
+    激活码验证="1"//正常返回
+
+	
+End Function
+
+Function 心跳(数据包,激活码,软件编号)
+    Dim 设备类型 = Device.GetName()//获取设备名
+    dim 机器码=GetDeviceID()//获取机器码
+    Dim 随机标示
+    //设备信息读取
+    //安卓路径
+
+    Dim 随机标示文件路径 = "/sdcard/com.ks.qk/logs/"&软件编号&激活码&"sjbs.txt"'随机标示文件路径
+    //获取设备信息 
+    
+    If 设备类型 = "iPhone" Then 
+        //苹果路径
+        随机标示文件路径 = "/var/log/qkks/"&软件编号&激活码&"sjbs.txt"'随机标示文件路径
+    End If
+	
+    '检查本机是否存在随机标示文件
+    If Dir.Exist(随机标示文件路径) = 1 Then 
+        //有随机文件
+        随机标示 = Trim(File.Read(随机标示文件路径))
+    Else 
+        //无随机文件
+        随机标示= 随机字符串(12)
+        File.Write 随机标示文件路径, 随机标示
+        随机标示=Trim(随机标示)//获取随机标示 	
+    End If		
+	
+	
+    Dim data="sj="&数据包&"&rjbh="&软件编号&"&sbm="&设备类型&"&sbbh="&机器码&"&sjbs="&随机标示
+    
+    Dim fhz=Url.Post("http://www.vip667.cn/API/web2/xt.php",data)
+    fhz = Trim(fhz)
+    fhz = Split(fhz, ",")//分割提示
+    If fhz(0) = "-1" Then 
+        If Dialog.MsgBox(fhz(1), 0) = 0 Then 
+            EndScript'停止脚本
+        End If
+    End If	
+    心跳=fhz(1)
+End Function
+
+Function 远程变量(数据包,软件编号)
+    Dim fhz=Url.Post("http://www.vip667.cn/API/web2/bl.php","sj="&数据包&"&rjbh="&软件编号)
+    fhz = Trim(fhz)
+    fhz = Split(fhz, "@")//分割提示
+    If fhz(0) = "-1" Then 
+        If Dialog.MsgBox(fhz(1), 0) = 0 Then 
+            EndScript'停止脚本
+        End If
+    End If	
+    远程变量=fhz(1)
+	
+End Function
+
+Function 激活码到期时间(数据包)
+    Dim fhz=Url.Post("http://www.vip667.cn/API/web2/jhmdq.php","sj="&数据包)
+    fhz = Trim(fhz)
+    dim fhzz = Split(fhz, ",")//分割提示
+    If fhzz(0) = "-1" Then 
+        If Dialog.MsgBox(fhzz(1), 0) = 0 Then 
+            脚本是否正常运行 = true
+            EndScript'停止脚本
+        End If
+    End If	
+    激活码到期时间=fhz
+End Function
+
+Function 随机字符串(位数)
+    Dim i,位置,字符串,字母
+    字母="ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyz"
+    字符串=""
+    For i=0 To 位数 - 1   '前面的位数决定几位随机字母
+        位置 = Int((Len(字母) * Rnd()) + 1)
+        字符串 = 字符串 & Mid(字母,位置,1)
+    Next
+    随机字符串 = 字符串
+End Function
+
+Function 退出登入(数据包,激活码,软件编号)
+    Dim 设备类型 = Device.GetName()//获取设备名
+    dim 机器码=GetDeviceID()//获取机器码
+    Dim 随机标示
+    //设备信息读取
+    //安卓路径
+
+    dim 随机标示文件路径 = "/sdcard/com.ks.qk/logs/"&软件编号&激活码&"sjbs.txt"'随机标示文件路径
+    //获取设备信息 
+    
+    If 设备类型 = "iPhone" Then 
+        //苹果路径
+        随机标示文件路径 = "/var/log/qkks/"&软件编号&激活码&"sjbs.txt"'随机标示文件路径
+    End If
+	
+    '检查本机是否存在随机标示文件
+    If Dir.Exist(随机标示文件路径) = 1 Then 
+        //有随机文件
+        随机标示 = Trim(File.Read(随机标示文件路径))
+    Else 
+        //无随机文件
+        随机标示= 随机字符串(5)
+        File.Write 随机标示文件路径, 随机标示
+        随机标示=Trim(随机标示)//获取随机标示 	
+    End If		
+	
+	
+    Dim data="sj="&数据包&"&rjbh="&软件编号&"&sbm="&设备类型&"&sbbh="&机器码&"&sjbs="&随机标示
+    Dim fhz=Url.Post("http://www.vip667.cn/API/web2/tcdr.php",data)
+    fhz = Trim(fhz)
+    'TracePrint fhz
+    fhz = Split(fhz, ",")//分割提示
+    If fhz(0) = "-1" Then 
+        //        If Dialog.MsgBox(fhz(1), 0) = 0 Then 
+        //            脚本是否正常运行 = true
+        //            EndScript'停止脚本
+        //        End If
+    Else 
+        //重新写入随机文件
+        随机标示= 随机字符串(5)
+        File.Write 随机标示文件路径, 随机标示
+        退出登入 = fhz(1)
+    End If
+	
+End Function
+
+//+++++++++++++++验证结束++++++++++++++++++++++++++++
+
+Function 蓝奏云直链解析(网址)
+	
+    网址 = Replace(网址,"com/","com/tp/") 
+    Dim html= url.get(网址,1000)
+    //    TracePrint html
+    Dim url前段 = ShanHai.RegexFind(html,"var domianload = '(.-)';" )
+    Dim url后段 = ShanHai.RegexFind(html,"submit.href = domianload .-'(.-)'")
+    url前段 = url前段(0)
+    url后段 = url后段(0)
+    //    TracePrint url前段
+    //    TracePrint url后段
+    If url前段 = Null or url后段 = Null Then 
+        蓝奏云直链解析 = 网址
+    Else 
+        Dim 直链 = url前段 & url后段
+        //        TracePrint 直链
+        蓝奏云直链解析 = 直链
+    End If
+
+
+
+    //	  Dim 请求头()
+    //    请求头["accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
+    //    请求头["user-agent"] = "Mozilla/5.0 (Linux; U; Android 6.0.1; zh-cn; MI 4LTE Build/MMB29M) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/61.0.3163.128 Mobile Safari/537.36 XiaoMi/MiuiBrowser/10.0.6"
+
+    //    Dim json= jsdvip.HttpGet (网址)
+    //    Dim resp= Encode.JsonToTable(json)
+    //    Dim html = resp["body"]
+    //    TracePrint html 
+    //    dim RegexArr = ShanHai.RegexFind(html,"src=""(.-)"" frameborder=")
+    //    Dim Url1 =" https://www.lanzoui.com"&RegexArr(1)
+    //    json= jsdvip.HttpGet (Url1)
+    //    resp= Encode.JsonToTable(json)
+    //    html = resp["body"]
+    //    TracePrint html
+    //	
+    //
+    //    RegexArr = ShanHai.RegexFind(html,"var ajaxdata = '(.-)';")
+    //    TracePrint RegexArr(0)
+    //    Dim 请求数据()
+    //    请求数据["action"] = "downprocess"
+    //   	请求数据["sign"] = RegexArr(0) 
+    // 	请求数据["ves"] = "1"
+    //
+    //    dim SUrl = "https://www.lanzoui.com/ajaxm.php"
+    //    json = jsdvip.HttpPost(SUrl, 请求数据)
+    //   	TracePrint json
+    //    resp= Encode.JsonToTable(json)
+    //    html = resp["body"]
+    //    TracePrint html
+    //    html= Encode.JsonToTable(html)
+    //	
+    //	Dim zt = html["zt"]
+    //	Dim dom = html["dom"]
+    //	Dim url0 = html["url"]
+    //	TracePrint zt,dom,url0
+    //	Dim 直链 = dom & "/file/" & url0
+    //	TracePrint 直链
+    //	zm.OpenURL(直链)
+End Function
+
+
+
+// 联众滑块打码开始+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Function 联众滑块打码()
+	
+	
+    Dim softID = "19817"'软件ID
+    Dim Secret = "TlorbRMf2ZskmXL0h4T9g9gSOYMAkp8XNdQU0a8p"	'安全码,在开发者后台-安全中心获取
+    Dim filepath = GetSdcardDir() & "/lzhk.png"'图片路径
+    Dim tpe = 1310	'验证码类型
+    Dim ot = 60	'超时时间(秒)
+    Dim minlen = 0'验证码最小长度
+    Dim maxlen = 0'验证码最大长度
+    Dim 滑动起点x = 80
+    Dim 滑动起点y = 970
+    Dim 左上角X = 48
+    Dim 左上角Y = 258
+    Dim 右下角X = 1032
+    Dim 右下角Y = 834
+    Dim RetTbl, ID, Result
+
+	
+    //截取滑块图片保存
+    SnapShot filepath, 左上角X, 左上角Y, 右下角X, 右下角Y
+    Delay 2000
+
+    RetTbl = lzdm.lz_SendVerCode(softID, Secret, user, pwd, filepath, tpe, ot, minlen, maxlen)
+    If RetTbl Then 
+        If RetTbl["code"] = 0 Then 
+            ID = RetTbl["data"]["captchaId"]
+            Result = RetTbl["data"]["recognition"]
+            TracePrint "联众验证码识别结果为: ", Result
+            TracePrint "联众验证码ID为: ", ID
+            // Call 信息提示(1,"联众验证码识别结果为: " & Result)
+            // 滑块坐标 滑动起点x = 110 滑动起点y = 970
+            // 滑动到  滑动起点x  +　intX2 - intX1,滑动起点y
+            // Result = "161,288|705,288"
+            //如果 Result 不是"161,288|705,288"这种格式的就是识别失败,成功就打码,失败就上报
+
+            If InStr(1, Result, "|") > 0 Then  
+                //TracePrint"滑块识别成功" 
+                Call 信息提示(1, "滑块识别成功",2)
+                
+                Dim arr,intX1,intX2,滑动终点x
+                arr = Split(Result, "|")
+                intX1 = Split(arr(1), ",")
+                滑动终点x = int(intX1(0))
+
+                Dim 延迟 = 随机数(30,50)
+                jsdvip.swipe 滑动起点x, 滑动起点y+随机数(-10,10), 滑动终点x - 188 + 随机数(-50, 50), 滑动起点y+随机数(-8,8), 滑动终点x - 66 + 随机数(-50, 50), 滑动起点y+随机数(-5,5), 滑动终点x, 滑动起点y+随机数(-3,3), 延迟
+
+                //                    arr = Split(Result, "|")
+                //                    intX1 = Split(arr(0), ",")
+                //                    intX2 = Split(arr(1), ",")
+                //                    intX1 = int(intX1(0))
+                //                    intX2 = Int(intX2(0))
+                //                    滑动终点x = 滑动起点x + intX2 - intX1
+                //                    Dim 延迟 = 随机数(30,50)
+                //        		
+                //                    jsdvip.swipe 滑动起点x, 滑动起点y+随机数(-5,5), 滑动终点x - 188 + 随机数(-50, 50), 滑动起点y+随机数(-5,5), 滑动终点x - 66 + 随机数(-50, 50), 滑动起点y+随机数(-5,5), 滑动终点x, 滑动起点y+随机数(-5,5), 延迟
+                Delay 2000
+            Else 
+    
+                TracePrint "联众验证码识别失败,上报"
+                Call 联众滑块报错()
+ 	
+            End If
+
+        Else 
+            Call 信息提示(1, "联众验证码结果获取失败, 错误原因: " & RetTbl["message"]& "   请手动打码,速度要快,姿势要帅",2)
+        End If
+    Else 
+        Call 信息提示(1, "联众验证码HTTP请求发送失败,请手动打码,速度要快,姿势要帅",2)
+    End If
+
+ 
+End Function
+
+//联众 结果报错
+Function 联众滑块报错()
+	
+    Dim softID = "19817"'软件ID
+    Dim Secret = "TlorbRMf2ZskmXL0h4T9g9gSOYMAkp8XNdQU0a8p"	'安全码,在开发者后台-安全中心获取
+    Dim RetTbl, ID, Result
+	
+    RetTbl = lzdm.lz_ReportError(softID, Secret, user, pwd, ID)
+    If RetTbl Then 
+        If RetTbl["code"] = 0 Then 
+            If RetTbl["data"]["result"] Then
+                Call 信息提示(2,"联众验证码报错提交成功",2)
+            Else
+                Call 信息提示(2,"联众验证码报错提交失败",2)
+            End If
+        Else
+            Call 信息提示(2,"联众验证码报错提交失败, 错误原因: " & RetTbl["message"],2)
+        End If
+    Else
+        Call 信息提示(2,"联众验证码报错HTTP请求发送失败",2)
+    End If
+ 
+	
+End Function
+
+//联众 检查点数
+Function 联众检查点数()
+	
+    Dim softID = "19817"'软件ID
+    Dim Secret = "TlorbRMf2ZskmXL0h4T9g9gSOYMAkp8XNdQU0a8p"	'安全码,在开发者后台-安全中心获取
+    Dim RetTbl, ID, Result
+	
+    RetTbl = lzdm.lz_GetUserInfo(softID, Secret, user, pwd)
+
+    If RetTbl Then 
+        If RetTbl["code"] = 0 Then 
+			
+			
+            TracePrint "联众当前用户剩余点数: ", RetTbl["data"]["userPoints"]
+            TracePrint "联众当前用户可用点数: ", RetTbl["data"]["availablePoints"]
+            TracePrint "联众当前用户锁定点数: ", RetTbl["data"]["lockPoints"]
+            Call 信息提示(2, "联众当前用户可用点数: " & RetTbl["data"]["availablePoints"],2)
+            
+            Dim 可用点数 = int(RetTbl["data"]["availablePoints"])
+            If 可用点数 < 100 Then 
+                //TracePrint "联众当前用户可用点数: " & 可用点数 " 不足 100 点,请尽快充值"
+                Call 信息提示(10, "联众当前用户可用点数: " & 可用点数 &" 不足 100 点,请尽快充值",2)
+            	
+            ElseIf 可用点数 < 20 Then
+                Call 信息提示(30, "联众当前用户可用点数: " & 可用点数 &" 不足 20 点,脚本即将停止运行",2)
+                Call 后台清理()
+                Call 退出脚本()
+			
+            End If
+
+        Else
+            Call 信息提示(3,"联众查询点数失败, 错误原因: " & RetTbl["message"],2)
+       
+        End If
+        
+    Else
+        Call 信息提示(3,"联众查询点数失败, 错误原因: HTTP请求发送失败",2)
+    End If
+ 	
+End Function
+
+// 联众滑块打码结束+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+
+
+
+
+
+
+//*****************************云控函数开始*****************************
+    
+Function 云控变量(str1,str2,str3)
+	
+    Dim 保存路径 = "/sdcard/com.ks.qk/logs/"
+    Dim 请求地址 = "https://shimo.im/docs/XpyJQQyp8C3kVpHv"
+
+    Dim 请求头1()
+    请求头1["accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
+    请求头1["user-agent"] = "Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1"
+    
+    Dim 请求头2()		 
+    请求头2["accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
+    请求头2["user-agent"] = "Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.25 Mobile Safari/537.36"
+
+    Dim 请求头3()
+    请求头3["accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
+    请求头3["user-agent"] = "Mozilla/5.0 (Linux; Android 8.0; Pixel 2 Build/OPD3.170816.012) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.25 Mobile Safari/537.36"
+	
+    Dim 请求头4()
+    请求头4["accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
+    请求头4["user-agent"] = "Mozilla/5.0 (Linux; Android 8.0.0; Pixel 2 XL Build/OPD1.170816.004) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.25 Mobile Safari/537.36"
+    
+    
+    Dim 请求头5()
+    请求头5["accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
+    请求头5["user-agent"] = "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1"
+    
+    Dim 请求头6()
+    请求头6["accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
+    请求头6["user-agent"] = "Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1"
+    
+    Dim 请求头7()
+    请求头7["accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
+    请求头7["user-agent"] = "Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1"
+    
+    Dim 请求头8()
+    请求头8["accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
+    请求头8["user-agent"] = "Mozilla/5.0 (iPad; CPU OS 11_0 like Mac OS X) AppleWebKit/604.1.34 (KHTML, like Gecko) Version/11.0 Mobile/15A5341f Safari/604.1"
+	
+    Dim 请求头数组 = Array(请求头1,请求头2,请求头3,请求头4,请求头5,请求头6,请求头7,请求头8)
+    Dim 请求头 = shanhai.RandArray(请求头数组)
+    //	TracePrint 请求头["accept"]
+    //	TracePrint 请求头["user-agent"]
+
+    Dim html= jsdvip.HttpGet (请求地址 ,请求头)
+    //TracePrint html
+    Delay 200
+    //<p  line=\"koY1\">黑屏编码:5196309571328849066</p>
+    //<p  line=\"y6dH\">黑屏编码:5233464278383710713</p>
+    //<p  line=\"RFsE\">黑屏编码:5205316780474277096</p>
+    //<p  line=\"g4Xm\">黑屏编码:5235997555122147380</p>
+    //<p  line=\"haYw\">黑屏编码:5234027227303498120</p>
+    //<p  line=\"78x1\">黑屏编码:5256545226602788680</p>
+    //<p  line=\"UUFr\">黑屏编码:5204190882784128296</p>
+    //<p  line=\"iK5K\">黑屏编码:5207568579768653060</p>
+    //<p  line=\"N4oB\">黑屏编码:5228679204748101211</p>
+    //<p  line=\"1Ez0\">黑屏编码:5216857253884522864</p>
+    //<p  line=\"tq0u\">黑屏编码:5227553301909246060</p>
+    //<p  line=\"0dZl\">金币读取间隔:5</p>
+    //<p  line=\"GLs9\">邀请码前缀:659</p>
+
+
+    Dim RegexArr1 = shanhai.RegexFind(html,"<p  line=\\"".-"">" & str1 & ":(.-)</p>") 
+    Delay 200
+    Dim RegexArr2 = shanhai.RegexFind(html,"<p  line=\\"".-"">" & str2 & ":(.-)</p>")
+    Delay 200
+    Dim RegexArr3 = shanhai.RegexFind(html,"<p  line=\\"".-"">" & str3 & ":(.-)</p>")
+    
+    //    For Each arr In RegexArr
+    //        TracePrint arr
+    //    Next
+    //    云控变量 = shanhai.RandArray(RegexArr)
+    //   云控变量 = Clone(RegexArr)
+    
+    Delay 200
+    TracePrint str1,UBound(RegexArr1) +1
+    TracePrint str2,UBound(RegexArr2) +1
+    TracePrint str3,UBound(RegexArr3) +1
+	
+    Delay 200
+    //如果黑屏编码为空
+    If UBound(RegexArr1) < 0 Then
+        If Dir.Exist(保存路径 & str1) = 0 Then 
+            File.Write 保存路径 & str1, "5196309571328849066"
+        End if
+    Else 
+        File.WriteLines (保存路径 & str1, RegexArr1)
+    End If
+	
+    //如果金币请取为空
+    If UBound(RegexArr2) < 0 Then
+        If Dir.Exist(保存路径 & str2) = 0 Then 
+            File.Write 保存路径 & str2, "5"
+        End if
+    Else 
+        File.WriteLines (保存路径 & str2, RegexArr2)
+    End If
+    
+    //如果邀请码为空
+    If UBOUND(RegexArr3) < 0 Then 
+        If Dir.Exist(保存路径 & str3) = 0 Then 
+            File.Write 保存路径 & str3, "659\n626"
+        End if	
+    Else 
+        File.WriteLines (保存路径 & str3, RegexArr3)
+    End If
+	
+End Function
+//*****************************云控函数结束*****************************    
+    
+    
