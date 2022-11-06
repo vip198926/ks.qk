@@ -1,0 +1,86 @@
+
+Function 运行记录()
+    Dim 运行记录路径 = "/sdcard/com.ks.qk/logs/Record.log"
+    Dim 运行记录内容 = File.Read(运行记录路径)
+    Dim 取号记录路径 = "/sdcard/com.ks.qk/logs/Cloud_Num.log"
+    Dim 云端取号记录 = File.Read(取号记录路径)
+    Dim 显示记录路径 = "/sdcard/com.ks.qk/logs/Show"
+    Dim 显示记录 = File.Read(显示记录路径)
+	
+    If 显示记录 = "false" Then 
+        UIP.SetAttribute "文字框_运行记录", {"显示内容":"运行记录: 未刷新"}
+        File.Write(显示记录路径,"true")	
+    Else 
+        UIP.SetAttribute "文字框_运行记录", {"显示内容":运行记录内容}
+        UIP.SetAttribute("文字框_取号记录",{"显示内容":云端取号记录})
+        File.Write(显示记录路径,"false")
+    End If
+End Function
+
+Function 取号记录()
+    Dim 取号记录路径 = "/sdcard/com.ks.qk/logs/Cloud_Num.log"
+    Dim 云端取号记录 = File.Read(取号记录路径)
+    UIP.SetAttribute("文字框_取号记录",{"显示内容":云端取号记录})
+End Function
+
+
+//Function 查看收益()
+//    Dim 收益记录路径 = "/sdcard/com.ks.qk/logs/Money.log"
+//    Dim 收益记录 = File.Read(收益记录路径)
+//    Dim 取号记录路径 = "/sdcard/com.ks.qk/logs/Cloud_Num.log"
+//    Dim 云端取号记录 = File.Read(取号记录路径)
+//    Dim 显示记录路径 = "/sdcard/com.ks.qk/logs/Show"
+//    Dim 显示记录 = File.Read(显示记录路径)
+//	Dim 收益内容
+//    If 显示记录 = "false" Then 
+//        UIP.SetAttribute "文字框_查看收益", {"显示内容":"收益记录: 未刷新"}
+//        File.Write(显示记录路径,"true")
+//    Else 
+//        
+//        Dim talbeV = Encode.JsonToTable(收益记录)  
+//        Dim 编号, 记录
+//        For Each 编号,记录 In talbeV
+//            收益内容 = 收益内容 &"\n"& 记录
+//        Next
+//	````
+//        UIP.SetAttribute "文字框_查看收益", {"显示内容":收益内容}
+//        UIP.SetAttribute("文字框_取号记录",{"显示内容":云端取号记录})
+//        File.Write(显示记录路径,"false")
+//    End If
+//End Function
+
+Function 清除收益()
+    Dim 收益记录路径 = "/sdcard/com.ks.qk/logs/Money.log"
+    Dir.Delete(收益记录路径)
+    UIP.SetAttribute "文字框_查看收益", {"显示内容":"收益记录: 已清除"}
+    ShowMessage"收益记录已清除"
+End Function
+
+
+
+Function 查看收益()
+    Dim 收益记录路径 = "/sdcard/com.ks.qk/logs/Money.log"
+    Dim 收益记录 = File.Read(收益记录路径)
+    Dim 取号记录路径 = "/sdcard/com.ks.qk/logs/Cloud_Num.log"
+    Dim 云端取号记录 = File.Read(取号记录路径)
+    Dim 显示记录路径 = "/sdcard/com.ks.qk/logs/Show"
+    Dim 显示记录 = File.Read(显示记录路径)
+
+
+    If 显示记录 = "false" Then 
+        UIP.SetAttribute "文字框_查看收益", {"显示内容":"收益记录: 未刷新"}
+        File.Write(显示记录路径,"true")
+    Else 
+        
+        Dim 收益记录表 = Encode.JsonToTable(收益记录)  
+        Dim 编号, 记录,收益内容
+    
+        For Each 编号,记录 In 收益记录表
+            收益内容 = 记录 & "\n" & 收益内容
+        Next
+     
+        UIP.SetAttribute "文字框_查看收益", {"显示内容":收益内容}
+        UIP.SetAttribute("文字框_取号记录",{"显示内容":云端取号记录})
+        File.Write(显示记录路径,"false")
+    End If
+End Function
